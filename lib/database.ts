@@ -25,13 +25,16 @@ declare global {
 
 function getClientPromise(): Promise<MongoClient> {
   if (!MONGODB_URI) throw new Error("MONGODB_URI environment variable is not set.");
-  if (process.env.NODE_ENV === "development") {
-    if (!global._mongoClientPromise) {
-      global._mongoClientPromise = new MongoClient(MONGODB_URI).connect();
-    }
-    return global._mongoClientPromise;
+  // Cache the connection promise globally to avoid opening too many connections
+  // (important in both dev hot-reload AND serverless environments)
+  if (!global._mongoClientPromise) {
+    const client = new MongoClient(MONGODB_URI, {
+      serverSelectionTimeoutMS: 10_000,
+      connectTimeoutMS: 10_000,
+    });
+    global._mongoClientPromise = client.connect();
   }
-  return new MongoClient(MONGODB_URI).connect();
+  return global._mongoClientPromise;
 }
 
 async function getDb(): Promise<Db> {

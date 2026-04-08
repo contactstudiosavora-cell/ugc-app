@@ -454,8 +454,9 @@ Retourne UNIQUEMENT les 3 scripts avec les délimiteurs <<<>>>. Aucune explicati
         outputTokens,
         scripts,
       });
-    } catch {
-      // Non-blocking — history saving is best-effort
+    } catch (dbErr: unknown) {
+      // Log the error so it appears in Vercel logs — but don't fail the request
+      console.error("⚠️ MongoDB insertGeneration error:", dbErr instanceof Error ? dbErr.message : String(dbErr));
     }
 
     return NextResponse.json({

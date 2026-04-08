@@ -114,7 +114,8 @@ export async function POST() {
       if (!content) continue;
 
       const { randomUUID } = await import("crypto");
-      await db.collection("scripts").insertOne({
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await db.collection<any>("scripts").insertOne({
         _id: randomUUID(),
         companyId: gen.companyId,
         packageId: gen.packageId ?? null,

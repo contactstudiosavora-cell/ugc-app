@@ -179,11 +179,11 @@ export default function HistoryPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                       <span className={`text-[9px] uppercase tracking-widest font-display ${expanded === entry.id ? "text-lime" : "text-olive-muted"}`}>
-                        {TYPE_LABELS[entry.input.scriptType] ?? entry.input.scriptType}
+                        {TYPE_LABELS[entry.input.scriptType] ?? entry.input.scriptType ?? "UGC"}
                       </span>
                       <span className={`text-[9px] ${expanded === entry.id ? "text-white/30" : "text-olive/25"}`}>·</span>
                       <span className={`text-[9px] font-sans ${expanded === entry.id ? "text-white/30" : "text-olive/30"}`}>
-                        {entry.input.duration}s
+                        {entry.input.duration ?? "—"}s
                       </span>
                       {entry.validated && (
                         <>
@@ -205,7 +205,7 @@ export default function HistoryPage() {
                     </div>
                   </div>
                   <div className={`font-mono text-[10px] shrink-0 ${expanded === entry.id ? "text-lime" : "text-olive-muted"}`}>
-                    ${entry.cost.toFixed(5)}
+                    ${(entry.cost ?? 0).toFixed(5)}
                   </div>
                 </div>
               </button>
@@ -234,7 +234,7 @@ export default function HistoryPage() {
                 <div className="flex items-center gap-2 mb-2">
                   <span className="w-1.5 h-1.5 rounded-full bg-lime inline-block" />
                   <span className="text-olive-muted text-[10px] uppercase tracking-[0.2em] font-semibold">
-                    {TYPE_LABELS[expandedEntry.input.scriptType]} · {expandedEntry.input.duration}s
+                    {TYPE_LABELS[expandedEntry.input.scriptType] ?? "UGC"} · {expandedEntry.input.duration ?? "—"}s
                   </span>
                 </div>
                 <h2 className="font-display text-2xl text-olive tracking-wider">

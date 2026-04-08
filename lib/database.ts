@@ -334,7 +334,7 @@ function docToHistoryEntry(doc: GenerationDoc): HistoryEntry {
       duration: doc.duration as import("./types").Duration,
     },
     scripts: doc.scripts as Record<import("./types").ScriptAngle, string>,
-    cost: doc.costUsd,
+    cost: doc.costUsd ?? 0,
     validated: (doc.validatedAngle as import("./types").ScriptAngle | null) ?? undefined,
   };
 }

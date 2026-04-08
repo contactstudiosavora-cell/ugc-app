@@ -166,7 +166,7 @@ export default function ProductionPage() {
               >
                 {s === "all" ? "TOUS" : STATUS_CONFIG[s].label}
                 {s !== "all" && (
-                  <span className="ml-1 opacity-60">({counts[s as ScriptStatus] ?? 0})</span>
+                  <span className="ml-1 opacity-60">({counts[s as keyof typeof counts] ?? 0})</span>
                 )}
               </button>
             ))}

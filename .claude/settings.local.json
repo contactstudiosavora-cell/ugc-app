@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//usr/local/**)",
+      "Read(//c/Users/noahr/.nvm/versions/**)",
+      "Bash(powershell.exe -Command \"Get-Process -Name ''node'' -ErrorAction SilentlyContinue | Stop-Process -Force\")",
+      "Bash(curl -s http://localhost:3000)",
+      "Bash(dir /s /b C:Usersnoahrugc-plateformeapp C:Usersnoahrugc-plateformelib C:Usersnoahrugc-plateformecomponents)",
+      "Bash(findstr /v node_modules)",
+      "Bash(dir /b \"C:\\\\Users\\\\noahr\\\\ugc-plateforme\\\\app\")",
+      "Bash(dir /b \"C:\\\\Users\\\\noahr\\\\ugc-plateforme\\\\lib\")",
+      "Bash(dir /b \"C:\\\\Users\\\\noahr\\\\ugc-plateforme\\\\components\")",
+      "Bash(dir /b \"C:\\\\Users\\\\noahr\\\\ugc-plateforme\\\\app\\\\api\")"
+    ]
+  }
+}

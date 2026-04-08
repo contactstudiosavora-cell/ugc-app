@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { addHistoryEntry } from "@/lib/db";
+import {
+  extractDomain,
+  upsertCompany,
+  buildLearningContext,
+  insertGeneration,
+} from "@/lib/database";
 import type { ScriptType, Duration, ScriptAngle } from "@/lib/types";
 import { randomUUID } from "crypto";
 
@@ -245,12 +250,10 @@ const DURATION_INSTRUCTIONS: Record<Duration, string> = {
 function buildSystemPrompt(scriptType: ScriptType, duration: Duration): string {
   const isMicroTrottoir = scriptType === "micro_trottoir";
 
-  // Duration only affects non-micro-trottoir types (micro-trottoir has fixed structure)
   const durationGuidance = isMicroTrottoir
     ? ""
     : `\nDURÉE CIBLE ${duration} SECONDES : ${DURATION_INSTRUCTIONS[duration]}\n`;
 
-  // All types now use custom delimiters to avoid JSON quote-escaping issues
   const responseFormat = `FORMAT DE RÉPONSE OBLIGATOIRE :
 Retourne les 3 scripts séparés par ces délimiteurs EXACTEMENT — rien d'autre, zero explication, zero commentaire :
 
@@ -326,6 +329,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Resolve company from URL
+    let companyId: string | null = null;
+    let companyDomain: string | null = null;
+    let learningContext = "";
+
+    if (url) {
+      const domain = extractDomain(url);
+      if (domain) {
+        try {
+          const company = await upsertCompany(domain, niche);
+          companyId = company.id;
+          companyDomain = company.domain;
+          learningContext = await buildLearningContext(companyId);
+        } catch {
+          // Non-blocking — company lookup is best-effort
+        }
+      }
+    }
+
     // Build product context
     let productContext = "";
 
@@ -354,12 +376,11 @@ Les 3 scripts ont chacun un angle différent :
 Chaque script a son propre HOOK et angle distinct, mais tous respectent la même structure de sections.
 
 Informations sur le produit/service :
-${productContext}
+${productContext}${learningContext}
 
 Adapte le vocabulaire, les bénéfices et le ton à la cible de ce produit.
 Retourne UNIQUEMENT les 3 scripts avec les délimiteurs <<<>>>. Aucune explication.`;
 
-    // Micro-trottoir has a longer structure (branching × 3), others are shorter
     const maxTokens = scriptType === "micro_trottoir" ? 6_000 : 4_000;
 
     const msg = await client.messages.create({
@@ -374,7 +395,6 @@ Retourne UNIQUEMENT les 3 scripts avec les délimiteurs <<<>>>. Aucune explicati
       throw new Error("Pas de contenu textuel dans la réponse.");
     }
 
-    // All types use the custom delimiter format (avoids JSON quote-escaping issues)
     const raw = textBlock.text.trim();
     const ALL_TAGS = [
       "<<<EMOTIONAL>>>",
@@ -416,16 +436,23 @@ Retourne UNIQUEMENT les 3 scripts avec les délimiteurs <<<>>>. Aucune explicati
     usage.totalInputTokens += inputTokens;
     usage.totalOutputTokens += outputTokens;
 
-    // Persist to history
+    // Persist to MongoDB
     const id = randomUUID();
     try {
-      addHistoryEntry({
+      await insertGeneration({
         id,
-        createdAt: new Date().toISOString(),
-        input: { url, niche, description, instructions, scriptType, duration },
+        companyId,
+        companyDomain,
+        scriptType,
+        duration,
+        inputUrl: url ?? null,
+        inputNiche: niche ?? null,
+        inputDescription: description ?? null,
+        inputInstructions: instructions ?? null,
+        costUsd: parseFloat(cost.toFixed(6)),
+        inputTokens,
+        outputTokens,
         scripts,
-        cost: parseFloat(cost.toFixed(6)),
-        validated: null,
       });
     } catch {
       // Non-blocking — history saving is best-effort

@@ -1,116 +1,75 @@
 /**
- * SQLite database layer — powered by better-sqlite3
+ * MongoDB database layer
  *
- * Schema:
- *   companies   — one row per website/brand (keyed by domain)
- *   generations — one row per "Generate" click
- *   scripts     — three rows per generation (one per angle)
+ * Collections:
+ *   companies   — one doc per website/brand (keyed by domain)
+ *   generations — one doc per "Generate" click (scripts embedded)
  *
  * Learning:
  *   When generating for a company that already has validated scripts,
  *   those scripts are fetched and injected as style/tone examples.
  */
 
-import Database from "better-sqlite3";
-import path from "path";
-import fs from "fs";
+import { MongoClient, Db } from "mongodb";
+import { randomUUID } from "crypto";
 
-/* ─── Init ───────────────────────────────────────────────────── */
+/* ─── Connection caching (Next.js serverless pattern) ──────────── */
 
-const DATA_DIR = path.join(process.cwd(), "data");
-if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
+const MONGODB_URI = process.env.MONGODB_URI as string;
+const DB_NAME = process.env.DB_NAME || "ugc_scripts_db";
 
-let _db: Database.Database | null = null;
-
-export function getDb(): Database.Database {
-  if (_db) return _db;
-  _db = new Database(path.join(DATA_DIR, "ugc-scripts.db"));
-  _db.pragma("journal_mode = WAL"); // better concurrent perf
-  _db.pragma("foreign_keys = ON");
-  initSchema(_db);
-  return _db;
+declare global {
+  // eslint-disable-next-line no-var
+  var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
-/* ─── Schema ─────────────────────────────────────────────────── */
-
-function initSchema(db: Database.Database) {
-  db.exec(`
-    -- One row per unique website / brand
-    CREATE TABLE IF NOT EXISTS companies (
-      id          TEXT PRIMARY KEY,
-      domain      TEXT UNIQUE NOT NULL,
-      name        TEXT,
-      niche       TEXT,
-      created_at  TEXT NOT NULL,
-      updated_at  TEXT NOT NULL
-    );
-
-    -- One row per "Generate" click
-    CREATE TABLE IF NOT EXISTS generations (
-      id                  TEXT PRIMARY KEY,
-      company_id          TEXT REFERENCES companies(id),
-      script_type         TEXT NOT NULL,
-      duration            TEXT NOT NULL,
-      input_url           TEXT,
-      input_niche         TEXT,
-      input_description   TEXT,
-      input_instructions  TEXT,
-      cost_usd            REAL NOT NULL DEFAULT 0,
-      input_tokens        INTEGER DEFAULT 0,
-      output_tokens       INTEGER DEFAULT 0,
-      created_at          TEXT NOT NULL
-    );
-
-    -- Three rows per generation (one per angle: emotional / problem_solution / curiosity)
-    CREATE TABLE IF NOT EXISTS scripts (
-      id            TEXT PRIMARY KEY,
-      generation_id TEXT NOT NULL REFERENCES generations(id) ON DELETE CASCADE,
-      company_id    TEXT REFERENCES companies(id),
-      angle         TEXT NOT NULL,
-      content       TEXT NOT NULL,
-      is_validated  INTEGER NOT NULL DEFAULT 0,
-      validated_at  TEXT,
-      created_at    TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_gen_company  ON generations(company_id, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_scr_company  ON scripts(company_id, is_validated);
-    CREATE INDEX IF NOT EXISTS idx_scr_gen      ON scripts(generation_id);
-  `);
+function getClientPromise(): Promise<MongoClient> {
+  if (!MONGODB_URI) throw new Error("MONGODB_URI environment variable is not set.");
+  if (process.env.NODE_ENV === "development") {
+    if (!global._mongoClientPromise) {
+      global._mongoClientPromise = new MongoClient(MONGODB_URI).connect();
+    }
+    return global._mongoClientPromise;
+  }
+  return new MongoClient(MONGODB_URI).connect();
 }
 
-/* ─── Row types ──────────────────────────────────────────────── */
+async function getDb(): Promise<Db> {
+  const client = await getClientPromise();
+  return client.db(DB_NAME);
+}
 
-export interface CompanyRow {
-  id: string;
+/* ─── Types ──────────────────────────────────────────────────────── */
+
+export interface CompanyDoc {
+  _id: string;
   domain: string;
   name: string | null;
   niche: string | null;
-  created_at: string;
-  updated_at: string;
-  generation_count?: number;
-  validated_count?: number;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-export interface GenerationRow {
-  id: string;
-  company_id: string | null;
-  company_domain: string | null;
-  script_type: string;
+export interface GenerationDoc {
+  _id: string;
+  companyId: string | null;
+  companyDomain: string | null;
+  scriptType: string;
   duration: string;
-  input_url: string | null;
-  input_niche: string | null;
-  input_description: string | null;
-  input_instructions: string | null;
-  cost_usd: number;
-  input_tokens: number;
-  output_tokens: number;
-  created_at: string;
-  validated_angle: string | null;
+  inputUrl: string | null;
+  inputNiche: string | null;
+  inputDescription: string | null;
+  inputInstructions: string | null;
+  costUsd: number;
+  inputTokens: number;
+  outputTokens: number;
   scripts: Record<string, string>;
+  validatedAngle: string | null;
+  validatedAt: Date | null;
+  createdAt: Date;
 }
 
-/* ─── Companies ──────────────────────────────────────────────── */
+/* ─── Helpers ────────────────────────────────────────────────────── */
 
 /** Extract root domain from a URL string. Returns null if unparseable. */
 export function extractDomain(url: string): string | null {
@@ -123,105 +82,134 @@ export function extractDomain(url: string): string | null {
   }
 }
 
+/* ─── Companies ──────────────────────────────────────────────────── */
+
+export interface CompanyRow {
+  id: string;
+  domain: string;
+  name: string | null;
+  niche: string | null;
+  createdAt: string;
+  updatedAt: string;
+  generationCount?: number;
+  validatedCount?: number;
+}
+
+function docToCompanyRow(doc: CompanyDoc): CompanyRow {
+  return {
+    id: doc._id,
+    domain: doc.domain,
+    name: doc.name,
+    niche: doc.niche,
+    createdAt: doc.createdAt.toISOString(),
+    updatedAt: doc.updatedAt.toISOString(),
+  };
+}
+
 /** Get or create a company row for a domain. */
-export function upsertCompany(
+export async function upsertCompany(
   domain: string,
   niche?: string | null
-): CompanyRow {
-  const db = getDb();
-  const now = new Date().toISOString();
+): Promise<CompanyRow> {
+  const db = await getDb();
+  const col = db.collection<CompanyDoc>("companies");
+  const now = new Date();
 
-  const existing = db
-    .prepare("SELECT * FROM companies WHERE domain = ?")
-    .get(domain) as CompanyRow | undefined;
-
+  const existing = await col.findOne({ domain });
   if (existing) {
     if (niche && niche !== existing.niche) {
-      db.prepare(
-        "UPDATE companies SET niche = ?, updated_at = ? WHERE id = ?"
-      ).run(niche, now, existing.id);
-      return { ...existing, niche, updated_at: now };
+      await col.updateOne({ _id: existing._id }, { $set: { niche, updatedAt: now } });
+      return docToCompanyRow({ ...existing, niche, updatedAt: now });
     }
-    return existing;
+    return docToCompanyRow(existing);
   }
 
-  const id = crypto.randomUUID();
-  db.prepare(`
-    INSERT INTO companies (id, domain, name, niche, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `).run(id, domain, domain, niche ?? null, now, now);
-
-  return db
-    .prepare("SELECT * FROM companies WHERE id = ?")
-    .get(id) as CompanyRow;
+  const id = randomUUID();
+  const doc: CompanyDoc = {
+    _id: id,
+    domain,
+    name: domain,
+    niche: niche ?? null,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await col.insertOne(doc);
+  return docToCompanyRow(doc);
 }
 
 /** List all companies with generation + validation counts. */
-export function listCompanies(): CompanyRow[] {
-  const db = getDb();
-  return db
-    .prepare(
-      `
-    SELECT
-      c.*,
-      COUNT(DISTINCT g.id)                                       AS generation_count,
-      COUNT(DISTINCT CASE WHEN s.is_validated = 1 THEN s.id END) AS validated_count
-    FROM companies c
-    LEFT JOIN generations g ON g.company_id = c.id
-    LEFT JOIN scripts     s ON s.company_id = c.id
-    GROUP BY c.id
-    ORDER BY c.updated_at DESC
-  `
-    )
-    .all() as CompanyRow[];
+export async function listCompanies(): Promise<CompanyRow[]> {
+  const db = await getDb();
+  const companies = await db
+    .collection<CompanyDoc>("companies")
+    .find({})
+    .sort({ updatedAt: -1 })
+    .toArray();
+
+  // Get counts per company
+  const generationCol = db.collection<GenerationDoc>("generations");
+  const result: CompanyRow[] = [];
+
+  for (const c of companies) {
+    const generationCount = await generationCol.countDocuments({ companyId: c._id });
+    const validatedCount = await generationCol.countDocuments({
+      companyId: c._id,
+      validatedAngle: { $ne: null },
+    });
+    result.push({ ...docToCompanyRow(c), generationCount, validatedCount });
+  }
+  return result;
 }
 
 /** Update a company's display name. */
-export function updateCompanyName(id: string, name: string): void {
-  const db = getDb();
-  db.prepare(
-    "UPDATE companies SET name = ?, updated_at = ? WHERE id = ?"
-  ).run(name, new Date().toISOString(), id);
+export async function updateCompanyName(id: string, name: string): Promise<void> {
+  const db = await getDb();
+  await db
+    .collection<CompanyDoc>("companies")
+    .updateOne({ _id: id }, { $set: { name, updatedAt: new Date() } });
 }
 
-/* ─── Learning context ───────────────────────────────────────── */
+/* ─── Learning context ───────────────────────────────────────────── */
 
 export interface ValidatedScriptCtx {
   angle: string;
   content: string;
-  script_type: string;
-  input_niche: string | null;
+  scriptType: string;
+  inputNiche: string | null;
 }
 
 /**
  * Return up to `limit` validated scripts for a company.
  * Used as few-shot examples when generating new scripts.
  */
-export function getValidatedScripts(
+export async function getValidatedScripts(
   companyId: string,
   limit = 4
-): ValidatedScriptCtx[] {
-  const db = getDb();
-  return db
-    .prepare(
-      `
-    SELECT s.angle, s.content, g.script_type, g.input_niche
-    FROM scripts s
-    JOIN generations g ON s.generation_id = g.id
-    WHERE s.company_id = ? AND s.is_validated = 1
-    ORDER BY s.validated_at DESC
-    LIMIT ?
-  `
-    )
-    .all(companyId, limit) as ValidatedScriptCtx[];
+): Promise<ValidatedScriptCtx[]> {
+  const db = await getDb();
+  const docs = await db
+    .collection<GenerationDoc>("generations")
+    .find({ companyId, validatedAngle: { $ne: null } })
+    .sort({ validatedAt: -1 })
+    .limit(limit)
+    .toArray();
+
+  return docs
+    .filter((d) => d.validatedAngle && d.scripts[d.validatedAngle])
+    .map((d) => ({
+      angle: d.validatedAngle!,
+      content: d.scripts[d.validatedAngle!],
+      scriptType: d.scriptType,
+      inputNiche: d.inputNiche,
+    }));
 }
 
 /**
  * Build the learning context string to inject into the Claude prompt.
  * Returns empty string if no validated scripts exist yet.
  */
-export function buildLearningContext(companyId: string): string {
-  const validated = getValidatedScripts(companyId, 4);
+export async function buildLearningContext(companyId: string): Promise<string> {
+  const validated = await getValidatedScripts(companyId, 4);
   if (validated.length === 0) return "";
 
   const angleLabels: Record<string, string> = {
@@ -233,7 +221,7 @@ export function buildLearningContext(companyId: string): string {
   const examples = validated
     .map(
       (s, i) =>
-        `[Exemple validé ${i + 1} — Angle: ${angleLabels[s.angle] ?? s.angle.toUpperCase()}, Type: ${s.script_type}]\n${s.content}`
+        `[Exemple validé ${i + 1} — Angle: ${angleLabels[s.angle] ?? s.angle.toUpperCase()}, Type: ${s.scriptType}]\n${s.content}`
     )
     .join("\n\n---\n\n");
 
@@ -248,11 +236,12 @@ export function buildLearningContext(companyId: string): string {
   );
 }
 
-/* ─── Generations ────────────────────────────────────────────── */
+/* ─── Generations ─────────────────────────────────────────────────── */
 
-export function insertGeneration(data: {
+export async function insertGeneration(data: {
   id: string;
   companyId: string | null;
+  companyDomain: string | null;
   scriptType: string;
   duration: string;
   inputUrl?: string | null;
@@ -263,137 +252,106 @@ export function insertGeneration(data: {
   inputTokens: number;
   outputTokens: number;
   scripts: Record<string, string>;
-}): void {
-  const db = getDb();
-  const now = new Date().toISOString();
+}): Promise<void> {
+  const db = await getDb();
+  const now = new Date();
 
-  db.transaction(() => {
-    db.prepare(`
-      INSERT INTO generations (
-        id, company_id, script_type, duration,
-        input_url, input_niche, input_description, input_instructions,
-        cost_usd, input_tokens, output_tokens, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      data.id,
-      data.companyId,
-      data.scriptType,
-      data.duration,
-      data.inputUrl ?? null,
-      data.inputNiche ?? null,
-      data.inputDescription ?? null,
-      data.inputInstructions ?? null,
-      data.costUsd,
-      data.inputTokens,
-      data.outputTokens,
-      now
-    );
+  const doc: GenerationDoc = {
+    _id: data.id,
+    companyId: data.companyId,
+    companyDomain: data.companyDomain,
+    scriptType: data.scriptType,
+    duration: data.duration,
+    inputUrl: data.inputUrl ?? null,
+    inputNiche: data.inputNiche ?? null,
+    inputDescription: data.inputDescription ?? null,
+    inputInstructions: data.inputInstructions ?? null,
+    costUsd: data.costUsd,
+    inputTokens: data.inputTokens,
+    outputTokens: data.outputTokens,
+    scripts: data.scripts,
+    validatedAngle: null,
+    validatedAt: null,
+    createdAt: now,
+  };
 
-    for (const [angle, content] of Object.entries(data.scripts)) {
-      db.prepare(`
-        INSERT INTO scripts (id, generation_id, company_id, angle, content, is_validated, created_at)
-        VALUES (?, ?, ?, ?, ?, 0, ?)
-      `).run(
-        crypto.randomUUID(),
-        data.id,
-        data.companyId,
-        angle,
-        content,
-        now
-      );
-    }
+  await db.collection<GenerationDoc>("generations").insertOne(doc);
 
-    if (data.companyId) {
-      db.prepare(
-        "UPDATE companies SET updated_at = ? WHERE id = ?"
-      ).run(now, data.companyId);
-    }
-  })();
+  if (data.companyId) {
+    await db
+      .collection<CompanyDoc>("companies")
+      .updateOne({ _id: data.companyId }, { $set: { updatedAt: now } });
+  }
 }
 
-/* ─── Validation ─────────────────────────────────────────────── */
+/* ─── Validation ──────────────────────────────────────────────────── */
 
 /**
  * Set validated angle for a generation.
  * Passing null removes validation.
- * Only one angle per generation can be validated at a time.
  */
-export function setValidation(
+export async function setValidation(
   generationId: string,
   angle: string | null
-): boolean {
-  const db = getDb();
-  const now = new Date().toISOString();
+): Promise<boolean> {
+  const db = await getDb();
+  const update = angle
+    ? { $set: { validatedAngle: angle, validatedAt: new Date() } }
+    : { $set: { validatedAngle: null, validatedAt: null } };
 
-  // Reset all scripts in this generation first
-  db.prepare(
-    "UPDATE scripts SET is_validated = 0, validated_at = NULL WHERE generation_id = ?"
-  ).run(generationId);
+  const result = await db
+    .collection<GenerationDoc>("generations")
+    .updateOne({ _id: generationId }, update);
 
-  if (!angle) return true;
-
-  const result = db
-    .prepare(
-      "UPDATE scripts SET is_validated = 1, validated_at = ? WHERE generation_id = ? AND angle = ?"
-    )
-    .run(now, generationId, angle);
-
-  return result.changes > 0;
+  return result.matchedCount > 0;
 }
 
-/* ─── History ────────────────────────────────────────────────── */
+/* ─── History ─────────────────────────────────────────────────────── */
+
+import type { HistoryEntry } from "./types";
+
+function docToHistoryEntry(doc: GenerationDoc): HistoryEntry {
+  return {
+    id: doc._id,
+    createdAt: doc.createdAt.toISOString(),
+    input: {
+      url: doc.inputUrl ?? undefined,
+      niche: doc.inputNiche ?? undefined,
+      description: doc.inputDescription ?? undefined,
+      instructions: doc.inputInstructions ?? undefined,
+      scriptType: doc.scriptType as import("./types").ScriptType,
+      duration: doc.duration as import("./types").Duration,
+    },
+    scripts: doc.scripts as Record<import("./types").ScriptAngle, string>,
+    cost: doc.costUsd,
+    validated: (doc.validatedAngle as import("./types").ScriptAngle | null) ?? undefined,
+  };
+}
 
 /**
  * Return generation history as a flat list, optionally filtered by company.
- * Scripts are joined and returned as a Record<angle, content>.
  */
-export function listHistory(options?: {
+export async function listHistory(options?: {
   companyId?: string;
   limit?: number;
-}): GenerationRow[] {
-  const db = getDb();
+}): Promise<HistoryEntry[]> {
+  const db = await getDb();
+  const filter = options?.companyId ? { companyId: options.companyId } : {};
 
-  const conditions = options?.companyId ? "WHERE g.company_id = ?" : "";
-  const params: (string | number)[] = options?.companyId
-    ? [options.companyId]
-    : [];
+  const docs = await db
+    .collection<GenerationDoc>("generations")
+    .find(filter)
+    .sort({ createdAt: -1 })
+    .limit(options?.limit ?? 200)
+    .toArray();
 
-  if (options?.limit) params.push(options.limit);
-
-  const rows = db
-    .prepare(
-      `
-    SELECT
-      g.*,
-      c.domain AS company_domain,
-      (
-        SELECT angle FROM scripts
-        WHERE generation_id = g.id AND is_validated = 1
-        LIMIT 1
-      ) AS validated_angle
-    FROM generations g
-    LEFT JOIN companies c ON g.company_id = c.id
-    ${conditions}
-    ORDER BY g.created_at DESC
-    ${options?.limit ? "LIMIT ?" : ""}
-  `
-    )
-    .all(...params) as (GenerationRow & { validated_angle: string | null })[];
-
-  // Attach scripts to each generation
-  const stmt = db.prepare(
-    "SELECT angle, content FROM scripts WHERE generation_id = ?"
-  );
-
-  return rows.map((row) => {
-    const scriptRows = stmt.all(row.id) as { angle: string; content: string }[];
-    const scripts: Record<string, string> = {};
-    for (const s of scriptRows) scripts[s.angle] = s.content;
-    return { ...row, scripts };
-  });
+  return docs.map(docToHistoryEntry);
 }
 
-export function deleteGeneration(id: string): boolean {
-  const db = getDb();
-  return db.prepare("DELETE FROM generations WHERE id = ?").run(id).changes > 0;
+export async function deleteGeneration(id: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db
+    .collection<GenerationDoc>("generations")
+    .deleteOne({ _id: id });
+  return result.deletedCount > 0;
 }

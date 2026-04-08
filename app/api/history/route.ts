@@ -1,15 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import {
-  readHistory,
-  updateHistoryEntry,
-  deleteHistoryEntry,
-} from "@/lib/db";
+import { listHistory, setValidation, deleteGeneration } from "@/lib/database";
 import type { ScriptAngle } from "@/lib/types";
 
 // GET — return all history entries
 export async function GET() {
   try {
-    const history = readHistory();
+    const history = await listHistory();
     return NextResponse.json({ history });
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -17,7 +13,7 @@ export async function GET() {
   }
 }
 
-// PATCH — validate / update an entry
+// PATCH — validate / unvalidate an entry
 export async function PATCH(request: NextRequest) {
   try {
     const { id, validated } = (await request.json()) as {
@@ -27,7 +23,7 @@ export async function PATCH(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: "id requis." }, { status: 400 });
     }
-    const ok = updateHistoryEntry(id, { validated });
+    const ok = await setValidation(id, validated ?? null);
     if (!ok) {
       return NextResponse.json({ error: "Entrée non trouvée." }, { status: 404 });
     }
@@ -45,7 +41,7 @@ export async function DELETE(request: NextRequest) {
     if (!id) {
       return NextResponse.json({ error: "id requis." }, { status: 400 });
     }
-    const ok = deleteHistoryEntry(id);
+    const ok = await deleteGeneration(id);
     if (!ok) {
       return NextResponse.json({ error: "Entrée non trouvée." }, { status: 404 });
     }

@@ -85,6 +85,14 @@ export function extractDomain(url: string): string | null {
   }
 }
 
+/* ─── Shared utils ───────────────────────────────────────────────── */
+
+function toISOSafe(d: Date | string | null | undefined): string {
+  if (!d) return new Date().toISOString();
+  if (typeof d === "string") return d;
+  return d.toISOString();
+}
+
 /* ─── Companies ──────────────────────────────────────────────────── */
 
 export interface CompanyRow {
@@ -104,8 +112,8 @@ function docToCompanyRow(doc: CompanyDoc): CompanyRow {
     domain: doc.domain,
     name: doc.name,
     niche: doc.niche,
-    createdAt: doc.createdAt.toISOString(),
-    updatedAt: doc.updatedAt.toISOString(),
+    createdAt: toISOSafe(doc.createdAt),
+    updatedAt: toISOSafe(doc.updatedAt),
   };
 }
 
@@ -316,7 +324,7 @@ import type { HistoryEntry } from "./types";
 function docToHistoryEntry(doc: GenerationDoc): HistoryEntry {
   return {
     id: doc._id,
-    createdAt: doc.createdAt.toISOString(),
+    createdAt: toISOSafe(doc.createdAt),
     input: {
       url: doc.inputUrl ?? undefined,
       niche: doc.inputNiche ?? undefined,

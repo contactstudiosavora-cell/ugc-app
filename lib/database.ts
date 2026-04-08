@@ -1,17 +1,29 @@
 /**
- * MongoDB database layer
+ * MongoDB database layer — UGC Script Production Platform
  *
  * Collections:
- *   companies   — one doc per website/brand (keyed by domain)
- *   generations — one doc per "Generate" click (scripts embedded)
- *
- * Learning:
- *   When generating for a company that already has validated scripts,
- *   those scripts are fetched and injected as style/tone examples.
+ *   companies   — client brands with full profile
+ *   packages    — script packages per company
+ *   scripts     — individual validated/produced scripts
+ *   generations — one doc per "Generate" click
  */
 
 import { MongoClient, Db } from "mongodb";
 import { randomUUID } from "crypto";
+import type {
+  CompanyDoc,
+  CompanyRow,
+  PackageDoc,
+  PackageRow,
+  ScriptDoc,
+  ScriptRow,
+  GenerationDoc,
+  ScriptType,
+  ScriptAngle,
+  PackageStatus,
+  ScriptStatus,
+  HistoryEntry,
+} from "./types";
 
 /* ─── Connection caching (Next.js serverless pattern) ──────────── */
 
@@ -25,8 +37,6 @@ declare global {
 
 function getClientPromise(): Promise<MongoClient> {
   if (!MONGODB_URI) throw new Error("MONGODB_URI environment variable is not set.");
-  // Cache the connection promise globally to avoid opening too many connections
-  // (important in both dev hot-reload AND serverless environments)
   if (!global._mongoClientPromise) {
     const client = new MongoClient(MONGODB_URI, {
       serverSelectionTimeoutMS: 10_000,
@@ -42,39 +52,8 @@ async function getDb(): Promise<Db> {
   return client.db(DB_NAME);
 }
 
-/* ─── Types ──────────────────────────────────────────────────────── */
-
-export interface CompanyDoc {
-  _id: string;
-  domain: string;
-  name: string | null;
-  niche: string | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-export interface GenerationDoc {
-  _id: string;
-  companyId: string | null;
-  companyDomain: string | null;
-  scriptType: string;
-  duration: string;
-  inputUrl: string | null;
-  inputNiche: string | null;
-  inputDescription: string | null;
-  inputInstructions: string | null;
-  costUsd: number;
-  inputTokens: number;
-  outputTokens: number;
-  scripts: Record<string, string>;
-  validatedAngle: string | null;
-  validatedAt: Date | null;
-  createdAt: Date;
-}
-
 /* ─── Helpers ────────────────────────────────────────────────────── */
 
-/** Extract root domain from a URL string. Returns null if unparseable. */
 export function extractDomain(url: string): string | null {
   if (!url?.trim()) return null;
   try {
@@ -85,26 +64,15 @@ export function extractDomain(url: string): string | null {
   }
 }
 
-/* ─── Shared utils ───────────────────────────────────────────────── */
-
 function toISOSafe(d: Date | string | null | undefined): string {
   if (!d) return new Date().toISOString();
   if (typeof d === "string") return d;
   return d.toISOString();
 }
 
-/* ─── Companies ──────────────────────────────────────────────────── */
-
-export interface CompanyRow {
-  id: string;
-  domain: string;
-  name: string | null;
-  niche: string | null;
-  createdAt: string;
-  updatedAt: string;
-  generationCount?: number;
-  validatedCount?: number;
-}
+/* ═══════════════════════════════════════════════════════════════════
+   COMPANIES
+═══════════════════════════════════════════════════════════════════ */
 
 function docToCompanyRow(doc: CompanyDoc): CompanyRow {
   return {
@@ -112,12 +80,18 @@ function docToCompanyRow(doc: CompanyDoc): CompanyRow {
     domain: doc.domain,
     name: doc.name,
     niche: doc.niche,
+    description: doc.description ?? null,
+    communicationStyle: doc.communicationStyle ?? null,
+    targetAudience: doc.targetAudience ?? null,
+    servicesProducts: doc.servicesProducts ?? null,
+    brandVoice: doc.brandVoice ?? null,
+    contentTypes: doc.contentTypes ?? [],
     createdAt: toISOSafe(doc.createdAt),
     updatedAt: toISOSafe(doc.updatedAt),
   };
 }
 
-/** Get or create a company row for a domain. */
+/** Get or create a company row for a domain (used by generate route). */
 export async function upsertCompany(
   domain: string,
   niche?: string | null
@@ -141,6 +115,12 @@ export async function upsertCompany(
     domain,
     name: domain,
     niche: niche ?? null,
+    description: null,
+    communicationStyle: null,
+    targetAudience: null,
+    servicesProducts: null,
+    brandVoice: null,
+    contentTypes: [],
     createdAt: now,
     updatedAt: now,
   };
@@ -148,7 +128,7 @@ export async function upsertCompany(
   return docToCompanyRow(doc);
 }
 
-/** List all companies with generation + validation counts. */
+/** List all companies with counts. */
 export async function listCompanies(): Promise<CompanyRow[]> {
   const db = await getDb();
   const companies = await db
@@ -157,22 +137,92 @@ export async function listCompanies(): Promise<CompanyRow[]> {
     .sort({ updatedAt: -1 })
     .toArray();
 
-  // Get counts per company
-  const generationCol = db.collection<GenerationDoc>("generations");
   const result: CompanyRow[] = [];
-
   for (const c of companies) {
-    const generationCount = await generationCol.countDocuments({ companyId: c._id });
-    const validatedCount = await generationCol.countDocuments({
-      companyId: c._id,
-      validatedAngle: { $ne: null },
-    });
-    result.push({ ...docToCompanyRow(c), generationCount, validatedCount });
+    const generationCount = await db
+      .collection<GenerationDoc>("generations")
+      .countDocuments({ companyId: c._id });
+    const validatedCount = await db
+      .collection<GenerationDoc>("generations")
+      .countDocuments({ companyId: c._id, validatedAngle: { $ne: null } });
+    const packageCount = await db
+      .collection<PackageDoc>("packages")
+      .countDocuments({ companyId: c._id });
+    result.push({ ...docToCompanyRow(c), generationCount, validatedCount, packageCount });
   }
   return result;
 }
 
-/** Update a company's display name. */
+/** Get a single company by ID. */
+export async function getCompanyById(id: string): Promise<CompanyRow | null> {
+  const db = await getDb();
+  const doc = await db.collection<CompanyDoc>("companies").findOne({ _id: id });
+  if (!doc) return null;
+  return docToCompanyRow(doc);
+}
+
+/** Create a new company manually (from the companies page). */
+export async function createCompany(data: {
+  name: string;
+  domain?: string;
+  niche?: string;
+  description?: string;
+  communicationStyle?: string;
+  targetAudience?: string;
+  servicesProducts?: string;
+  brandVoice?: string;
+  contentTypes?: ScriptType[];
+}): Promise<CompanyRow> {
+  const db = await getDb();
+  const now = new Date();
+  const domain = data.domain?.trim() || slugify(data.name);
+
+  // Check if domain already exists
+  const existing = await db.collection<CompanyDoc>("companies").findOne({ domain });
+  if (existing) return docToCompanyRow(existing);
+
+  const id = randomUUID();
+  const doc: CompanyDoc = {
+    _id: id,
+    domain,
+    name: data.name,
+    niche: data.niche ?? null,
+    description: data.description ?? null,
+    communicationStyle: data.communicationStyle ?? null,
+    targetAudience: data.targetAudience ?? null,
+    servicesProducts: data.servicesProducts ?? null,
+    brandVoice: data.brandVoice ?? null,
+    contentTypes: data.contentTypes ?? [],
+    createdAt: now,
+    updatedAt: now,
+  };
+  await db.collection<CompanyDoc>("companies").insertOne(doc);
+  return docToCompanyRow(doc);
+}
+
+/** Update a company's full profile. */
+export async function updateCompany(
+  id: string,
+  data: Partial<{
+    name: string;
+    niche: string;
+    description: string;
+    communicationStyle: string;
+    targetAudience: string;
+    servicesProducts: string;
+    brandVoice: string;
+    contentTypes: ScriptType[];
+  }>
+): Promise<CompanyRow | null> {
+  const db = await getDb();
+  const now = new Date();
+  await db
+    .collection<CompanyDoc>("companies")
+    .updateOne({ _id: id }, { $set: { ...data, updatedAt: now } });
+  return getCompanyById(id);
+}
+
+/** Update a company's display name (legacy helper). */
 export async function updateCompanyName(id: string, name: string): Promise<void> {
   const db = await getDb();
   await db
@@ -180,7 +230,298 @@ export async function updateCompanyName(id: string, name: string): Promise<void>
     .updateOne({ _id: id }, { $set: { name, updatedAt: new Date() } });
 }
 
-/* ─── Learning context ───────────────────────────────────────────── */
+/** Delete a company (and optionally cascade). */
+export async function deleteCompany(id: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.collection<CompanyDoc>("companies").deleteOne({ _id: id });
+  return result.deletedCount > 0;
+}
+
+function slugify(str: string): string {
+  return str
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9-]/g, "")
+    .slice(0, 60);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   PACKAGES
+═══════════════════════════════════════════════════════════════════ */
+
+function docToPackageRow(doc: PackageDoc, companyName?: string | null): PackageRow {
+  return {
+    id: doc._id,
+    companyId: doc.companyId,
+    companyName: companyName ?? null,
+    name: doc.name,
+    scriptType: doc.scriptType,
+    status: doc.status,
+    scriptCount: doc.scriptCount,
+    createdAt: toISOSafe(doc.createdAt),
+    updatedAt: toISOSafe(doc.updatedAt),
+  };
+}
+
+/** List packages, optionally filtered by company. */
+export async function listPackages(companyId?: string): Promise<PackageRow[]> {
+  const db = await getDb();
+  const filter = companyId ? { companyId } : {};
+  const docs = await db
+    .collection<PackageDoc>("packages")
+    .find(filter)
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  const rows: PackageRow[] = [];
+  for (const doc of docs) {
+    const company = await db.collection<CompanyDoc>("companies").findOne({ _id: doc.companyId });
+    const scripts = await db
+      .collection<ScriptDoc>("scripts")
+      .find({ packageId: doc._id })
+      .toArray();
+    const validatedCount = scripts.filter((s) =>
+      ["validated", "in_production", "filmed"].includes(s.status)
+    ).length;
+    const filmedCount = scripts.filter((s) => s.status === "filmed").length;
+
+    rows.push({
+      ...docToPackageRow(doc, company?.name),
+      validatedCount,
+      filmedCount,
+      totalScripts: scripts.length,
+    });
+  }
+  return rows;
+}
+
+/** Get a single package by ID. */
+export async function getPackageById(id: string): Promise<PackageRow | null> {
+  const db = await getDb();
+  const doc = await db.collection<PackageDoc>("packages").findOne({ _id: id });
+  if (!doc) return null;
+  const company = await db.collection<CompanyDoc>("companies").findOne({ _id: doc.companyId });
+  return docToPackageRow(doc, company?.name);
+}
+
+/** Create a new package. */
+export async function createPackage(data: {
+  companyId: string;
+  name: string;
+  scriptType: ScriptType;
+  scriptCount?: number;
+}): Promise<PackageRow> {
+  const db = await getDb();
+  const now = new Date();
+  const id = randomUUID();
+  const doc: PackageDoc = {
+    _id: id,
+    companyId: data.companyId,
+    name: data.name,
+    scriptType: data.scriptType,
+    status: "active",
+    scriptCount: data.scriptCount ?? 0,
+    createdAt: now,
+    updatedAt: now,
+  };
+  await db.collection<PackageDoc>("packages").insertOne(doc);
+  const company = await db.collection<CompanyDoc>("companies").findOne({ _id: data.companyId });
+  return docToPackageRow(doc, company?.name);
+}
+
+/** Update a package. */
+export async function updatePackage(
+  id: string,
+  data: Partial<{ name: string; scriptType: ScriptType; status: PackageStatus; scriptCount: number }>
+): Promise<PackageRow | null> {
+  const db = await getDb();
+  await db
+    .collection<PackageDoc>("packages")
+    .updateOne({ _id: id }, { $set: { ...data, updatedAt: new Date() } });
+  return getPackageById(id);
+}
+
+/** Delete a package. */
+export async function deletePackage(id: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.collection<PackageDoc>("packages").deleteOne({ _id: id });
+  return result.deletedCount > 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SCRIPTS
+═══════════════════════════════════════════════════════════════════ */
+
+function docToScriptRow(
+  doc: ScriptDoc,
+  companyName?: string | null,
+  packageName?: string | null
+): ScriptRow {
+  return {
+    id: doc._id,
+    companyId: doc.companyId,
+    companyName: companyName ?? null,
+    packageId: doc.packageId,
+    packageName: packageName ?? null,
+    generationId: doc.generationId,
+    angle: doc.angle,
+    content: doc.content,
+    status: doc.status,
+    validatedAt: doc.validatedAt ? toISOSafe(doc.validatedAt) : null,
+    inProductionAt: doc.inProductionAt ? toISOSafe(doc.inProductionAt) : null,
+    filmedAt: doc.filmedAt ? toISOSafe(doc.filmedAt) : null,
+    notes: doc.notes ?? "",
+    createdAt: toISOSafe(doc.createdAt),
+  };
+}
+
+/** Create scripts for a generation (3 angles at once). */
+export async function createScripts(data: {
+  companyId: string;
+  packageId: string | null;
+  generationId: string;
+  scripts: Record<ScriptAngle, string>;
+}): Promise<ScriptRow[]> {
+  const db = await getDb();
+  const now = new Date();
+  const angles: ScriptAngle[] = ["emotional", "problem_solution", "curiosity"];
+  const docs: ScriptDoc[] = angles.map((angle) => ({
+    _id: randomUUID(),
+    companyId: data.companyId,
+    packageId: data.packageId,
+    generationId: data.generationId,
+    angle,
+    content: data.scripts[angle] || "",
+    status: "generated" as ScriptStatus,
+    validatedAt: null,
+    inProductionAt: null,
+    filmedAt: null,
+    notes: "",
+    createdAt: now,
+  }));
+
+  await db.collection<ScriptDoc>("scripts").insertMany(docs);
+  const company = await db.collection<CompanyDoc>("companies").findOne({ _id: data.companyId });
+  const pkg = data.packageId
+    ? await db.collection<PackageDoc>("packages").findOne({ _id: data.packageId })
+    : null;
+
+  return docs.map((d) => docToScriptRow(d, company?.name, pkg?.name));
+}
+
+/** List scripts with optional filters. */
+export async function listScripts(filters?: {
+  companyId?: string;
+  packageId?: string;
+  status?: ScriptStatus | ScriptStatus[];
+}): Promise<ScriptRow[]> {
+  const db = await getDb();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const filter: any = {};
+  if (filters?.companyId) filter.companyId = filters.companyId;
+  if (filters?.packageId) filter.packageId = filters.packageId;
+  if (filters?.status) {
+    if (Array.isArray(filters.status)) {
+      filter.status = { $in: filters.status };
+    } else {
+      filter.status = filters.status;
+    }
+  }
+
+  const docs = await db
+    .collection<ScriptDoc>("scripts")
+    .find(filter)
+    .sort({ createdAt: -1 })
+    .toArray();
+
+  const rows: ScriptRow[] = [];
+  for (const doc of docs) {
+    const company = await db.collection<CompanyDoc>("companies").findOne({ _id: doc.companyId });
+    const pkg = doc.packageId
+      ? await db.collection<PackageDoc>("packages").findOne({ _id: doc.packageId })
+      : null;
+    rows.push(docToScriptRow(doc, company?.name, pkg?.name));
+  }
+  return rows;
+}
+
+/** Get a single script by ID. */
+export async function getScriptById(id: string): Promise<ScriptRow | null> {
+  const db = await getDb();
+  const doc = await db.collection<ScriptDoc>("scripts").findOne({ _id: id });
+  if (!doc) return null;
+  const company = await db.collection<CompanyDoc>("companies").findOne({ _id: doc.companyId });
+  const pkg = doc.packageId
+    ? await db.collection<PackageDoc>("packages").findOne({ _id: doc.packageId })
+    : null;
+  return docToScriptRow(doc, company?.name, pkg?.name);
+}
+
+/** Update a script's status. */
+export async function updateScriptStatus(
+  id: string,
+  status: ScriptStatus,
+  meta?: { notes?: string }
+): Promise<boolean> {
+  const db = await getDb();
+  const now = new Date();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const update: any = { status };
+  if (status === "validated") update.validatedAt = now;
+  if (status === "in_production") update.inProductionAt = now;
+  if (status === "filmed") update.filmedAt = now;
+  if (status === "generated") {
+    update.validatedAt = null;
+    update.inProductionAt = null;
+    update.filmedAt = null;
+  }
+  if (meta?.notes !== undefined) update.notes = meta.notes;
+
+  const result = await db
+    .collection<ScriptDoc>("scripts")
+    .updateOne({ _id: id }, { $set: update });
+  return result.matchedCount > 0;
+}
+
+/** Update a script's content or notes. */
+export async function updateScript(
+  id: string,
+  data: Partial<{ content: string; notes: string; packageId: string | null }>
+): Promise<ScriptRow | null> {
+  const db = await getDb();
+  await db.collection<ScriptDoc>("scripts").updateOne({ _id: id }, { $set: data });
+  return getScriptById(id);
+}
+
+/** Bulk update status for multiple scripts. */
+export async function bulkUpdateScriptStatus(
+  scriptIds: string[],
+  status: ScriptStatus
+): Promise<number> {
+  const db = await getDb();
+  const now = new Date();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const update: any = { status };
+  if (status === "validated") update.validatedAt = now;
+  if (status === "in_production") update.inProductionAt = now;
+  if (status === "filmed") update.filmedAt = now;
+
+  const result = await db
+    .collection<ScriptDoc>("scripts")
+    .updateMany({ _id: { $in: scriptIds } }, { $set: update });
+  return result.modifiedCount;
+}
+
+/** Delete a script. */
+export async function deleteScript(id: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.collection<ScriptDoc>("scripts").deleteOne({ _id: id });
+  return result.deletedCount > 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   LEARNING CONTEXT (for generation intelligence)
+═══════════════════════════════════════════════════════════════════ */
 
 export interface ValidatedScriptCtx {
   angle: string;
@@ -190,22 +531,44 @@ export interface ValidatedScriptCtx {
 }
 
 /**
- * Return up to `limit` validated scripts for a company.
- * Used as few-shot examples when generating new scripts.
+ * Return up to `limit` validated scripts for a company (from scripts collection).
+ * Falls back to legacy generation-based validated scripts.
  */
-export async function getValidatedScripts(
+export async function getValidatedScriptsForCompany(
   companyId: string,
-  limit = 4
+  limit = 5
 ): Promise<ValidatedScriptCtx[]> {
   const db = await getDb();
-  const docs = await db
+
+  // First try the scripts collection
+  const scriptDocs = await db
+    .collection<ScriptDoc>("scripts")
+    .find({
+      companyId,
+      status: { $in: ["validated", "in_production", "filmed"] },
+    })
+    .sort({ validatedAt: -1 })
+    .limit(limit)
+    .toArray();
+
+  if (scriptDocs.length > 0) {
+    return scriptDocs.map((s) => ({
+      angle: s.angle,
+      content: s.content,
+      scriptType: "ugc",
+      inputNiche: null,
+    }));
+  }
+
+  // Fallback: legacy generations collection
+  const genDocs = await db
     .collection<GenerationDoc>("generations")
     .find({ companyId, validatedAngle: { $ne: null } })
     .sort({ validatedAt: -1 })
     .limit(limit)
     .toArray();
 
-  return docs
+  return genDocs
     .filter((d) => d.validatedAngle && d.scripts[d.validatedAngle])
     .map((d) => ({
       angle: d.validatedAngle!,
@@ -216,12 +579,41 @@ export async function getValidatedScripts(
 }
 
 /**
- * Build the learning context string to inject into the Claude prompt.
- * Returns empty string if no validated scripts exist yet.
+ * Return validated scripts from OTHER companies (to avoid pattern repetition).
  */
-export async function buildLearningContext(companyId: string): Promise<string> {
-  const validated = await getValidatedScripts(companyId, 4);
-  if (validated.length === 0) return "";
+export async function getGlobalValidatedScripts(
+  excludeCompanyId: string,
+  limit = 3
+): Promise<ValidatedScriptCtx[]> {
+  const db = await getDb();
+
+  const scriptDocs = await db
+    .collection<ScriptDoc>("scripts")
+    .find({
+      companyId: { $ne: excludeCompanyId },
+      status: { $in: ["validated", "in_production", "filmed"] },
+    })
+    .sort({ validatedAt: -1 })
+    .limit(limit)
+    .toArray();
+
+  return scriptDocs.map((s) => ({
+    angle: s.angle,
+    content: s.content.slice(0, 120),
+    scriptType: "ugc",
+    inputNiche: null,
+  }));
+}
+
+/**
+ * Build the full learning context string for Claude prompt injection.
+ */
+export async function buildLearningContext(
+  companyId: string,
+  company?: CompanyRow | null
+): Promise<string> {
+  const fewShot = await getValidatedScriptsForCompany(companyId, 5);
+  const globalPatterns = companyId ? await getGlobalValidatedScripts(companyId, 3) : [];
 
   const angleLabels: Record<string, string> = {
     emotional: "ÉMOTIONNEL",
@@ -229,30 +621,71 @@ export async function buildLearningContext(companyId: string): Promise<string> {
     curiosity: "CURIOSITÉ",
   };
 
-  const examples = validated
-    .map(
-      (s, i) =>
-        `[Exemple validé ${i + 1} — Angle: ${angleLabels[s.angle] ?? s.angle.toUpperCase()}, Type: ${s.scriptType}]\n${s.content}`
-    )
-    .join("\n\n---\n\n");
+  let context = "";
 
-  return (
-    `\n\n` +
-    `╔══════════════════════════════════════════════════════╗\n` +
-    `  SCRIPTS DÉJÀ VALIDÉS POUR CETTE MARQUE\n` +
-    `  Utilise-les comme RÉFÉRENCE de ton, style, vocabulaire et structure.\n` +
-    `  Ne les copie pas mot pour mot — inspire-toi pour créer quelque chose de nouveau.\n` +
-    `╚══════════════════════════════════════════════════════╝\n\n` +
-    examples
-  );
+  // Company profile injection
+  if (company) {
+    const profileLines: string[] = [];
+    if (company.description) profileLines.push(`Description : ${company.description}`);
+    if (company.communicationStyle) profileLines.push(`Style de communication : ${company.communicationStyle}`);
+    if (company.targetAudience) profileLines.push(`Cible : ${company.targetAudience}`);
+    if (company.servicesProducts) profileLines.push(`Produits/Services : ${company.servicesProducts}`);
+    if (company.brandVoice) profileLines.push(`Personnalité de marque : ${company.brandVoice}`);
+
+    if (profileLines.length > 0) {
+      context +=
+        `\n\n╔══════════════════════════════════════════════════════╗\n` +
+        `  PROFIL DE LA MARQUE : ${company.name ?? company.domain}\n` +
+        `╚══════════════════════════════════════════════════════╝\n` +
+        profileLines.join("\n");
+    }
+  }
+
+  // Few-shot examples from this company
+  if (fewShot.length > 0) {
+    const examples = fewShot
+      .map(
+        (s, i) =>
+          `[Script validé ${i + 1} — ${angleLabels[s.angle] ?? s.angle.toUpperCase()}]\n${s.content}`
+      )
+      .join("\n\n---\n\n");
+
+    context +=
+      `\n\n╔══════════════════════════════════════════════════════╗\n` +
+      `  SCRIPTS DÉJÀ VALIDÉS POUR CETTE MARQUE (${fewShot.length} exemple${fewShot.length > 1 ? "s" : ""})\n` +
+      `  → Inspire-toi du TON, du STYLE et du VOCABULAIRE.\n` +
+      `  → Ne copie pas mot pour mot — crée quelque chose de nouveau.\n` +
+      `╚══════════════════════════════════════════════════════╝\n\n` +
+      examples;
+  }
+
+  // Patterns to avoid from other companies
+  if (globalPatterns.length > 0) {
+    const patterns = globalPatterns
+      .map((s) => `- "${s.content.trim().substring(0, 100)}…"`)
+      .join("\n");
+
+    context +=
+      `\n\n╔══════════════════════════════════════════════════════╗\n` +
+      `  STRUCTURES DÉJÀ UTILISÉES — À NE PAS RÉPÉTER\n` +
+      `  Ces hooks/structures ont été utilisés pour d'autres marques.\n` +
+      `  Évite de les reproduire — sois original.\n` +
+      `╚══════════════════════════════════════════════════════╝\n` +
+      patterns;
+  }
+
+  return context;
 }
 
-/* ─── Generations ─────────────────────────────────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════
+   GENERATIONS
+═══════════════════════════════════════════════════════════════════ */
 
 export async function insertGeneration(data: {
   id: string;
   companyId: string | null;
   companyDomain: string | null;
+  packageId?: string | null;
   scriptType: string;
   duration: string;
   inputUrl?: string | null;
@@ -271,6 +704,7 @@ export async function insertGeneration(data: {
     _id: data.id,
     companyId: data.companyId,
     companyDomain: data.companyDomain,
+    packageId: data.packageId ?? null,
     scriptType: data.scriptType,
     duration: data.duration,
     inputUrl: data.inputUrl ?? null,
@@ -295,12 +729,8 @@ export async function insertGeneration(data: {
   }
 }
 
-/* ─── Validation ──────────────────────────────────────────────────── */
+/* ─── Validation (legacy — operates on generations) ─────────────── */
 
-/**
- * Set validated angle for a generation.
- * Passing null removes validation.
- */
 export async function setValidation(
   generationId: string,
   angle: string | null
@@ -319,9 +749,7 @@ export async function setValidation(
 
 /* ─── History ─────────────────────────────────────────────────────── */
 
-import type { HistoryEntry } from "./types";
-
-function docToHistoryEntry(doc: GenerationDoc): HistoryEntry {
+function docToHistoryEntry(doc: GenerationDoc, companyName?: string | null, packageName?: string | null): HistoryEntry {
   return {
     id: doc._id,
     createdAt: toISOSafe(doc.createdAt),
@@ -336,12 +764,13 @@ function docToHistoryEntry(doc: GenerationDoc): HistoryEntry {
     scripts: doc.scripts as Record<import("./types").ScriptAngle, string>,
     cost: doc.costUsd ?? 0,
     validated: (doc.validatedAngle as import("./types").ScriptAngle | null) ?? undefined,
+    companyId: doc.companyId,
+    packageId: doc.packageId,
+    companyName: companyName ?? null,
+    packageName: packageName ?? null,
   };
 }
 
-/**
- * Return generation history as a flat list, optionally filtered by company.
- */
 export async function listHistory(options?: {
   companyId?: string;
   limit?: number;
@@ -356,7 +785,17 @@ export async function listHistory(options?: {
     .limit(options?.limit ?? 200)
     .toArray();
 
-  return docs.map(docToHistoryEntry);
+  const entries: HistoryEntry[] = [];
+  for (const doc of docs) {
+    const company = doc.companyId
+      ? await db.collection<CompanyDoc>("companies").findOne({ _id: doc.companyId })
+      : null;
+    const pkg = doc.packageId
+      ? await db.collection<PackageDoc>("packages").findOne({ _id: doc.packageId })
+      : null;
+    entries.push(docToHistoryEntry(doc, company?.name, pkg?.name));
+  }
+  return entries;
 }
 
 export async function deleteGeneration(id: string): Promise<boolean> {

@@ -1,0 +1,620 @@
+"use client";
+
+import { useState, useEffect, use } from "react";
+import Link from "next/link";
+import type { CompanyRow, PackageRow, ScriptRow, HistoryEntry, ScriptType, PackageStatus } from "@/lib/types";
+
+const CONTENT_TYPES: { value: ScriptType; label: string; icon: string }[] = [
+  { value: "ugc", label: "UGC", icon: "📱" },
+  { value: "micro_trottoir", label: "MICRO-TROTTOIR", icon: "🎤" },
+  { value: "face_cam", label: "FACE CAM", icon: "👤" },
+  { value: "auto", label: "AUTO", icon: "✦" },
+];
+
+const STATUS_CONFIG: Record<PackageStatus, { label: string; color: string }> = {
+  active: { label: "ACTIF", color: "bg-lime/20 text-olive border-lime/30" },
+  filming: { label: "EN TOURNAGE", color: "bg-orange-100 text-orange-700 border-orange-200" },
+  completed: { label: "TERMINÉ", color: "bg-olive/10 text-olive-muted border-olive/20" },
+};
+
+const SCRIPT_STATUS_CONFIG = {
+  generated: { label: "GÉNÉRÉ", color: "bg-cream border-olive/15 text-olive-muted" },
+  validated: { label: "VALIDÉ", color: "bg-lime/20 border-lime/30 text-olive" },
+  in_production: { label: "EN PROD", color: "bg-orange-100 border-orange-200 text-orange-700" },
+  filmed: { label: "FILMÉ", color: "bg-olive/15 border-olive/20 text-olive" },
+};
+
+const ANGLE_LABELS = {
+  emotional: { label: "ÉMOTIONNEL", emoji: "❤️" },
+  problem_solution: { label: "PROBLÈME/SOL.", emoji: "🎯" },
+  curiosity: { label: "CURIOSITÉ", emoji: "🔥" },
+};
+
+type Tab = "profil" | "packages" | "scripts";
+
+/* ─── Page ──────────────────────────────────────────────────── */
+
+export default function CompanyDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = use(params);
+  const [company, setCompany] = useState<CompanyRow | null>(null);
+  const [packages, setPackages] = useState<PackageRow[]>([]);
+  const [scripts, setScripts] = useState<ScriptRow[]>([]);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState<Tab>("profil");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [showCreatePackage, setShowCreatePackage] = useState(false);
+
+  // Editable form state
+  const [form, setForm] = useState({
+    name: "",
+    niche: "",
+    description: "",
+    communicationStyle: "",
+    targetAudience: "",
+    servicesProducts: "",
+    brandVoice: "",
+    contentTypes: [] as ScriptType[],
+  });
+
+  useEffect(() => {
+    fetch(`/api/companies/${id}`)
+      .then((r) => r.json())
+      .then((d) => {
+        setCompany(d.company);
+        setPackages(d.packages ?? []);
+        setScripts(d.scripts ?? []);
+        setHistory(d.history ?? []);
+        if (d.company) {
+          setForm({
+            name: d.company.name ?? "",
+            niche: d.company.niche ?? "",
+            description: d.company.description ?? "",
+            communicationStyle: d.company.communicationStyle ?? "",
+            targetAudience: d.company.targetAudience ?? "",
+            servicesProducts: d.company.servicesProducts ?? "",
+            brandVoice: d.company.brandVoice ?? "",
+            contentTypes: d.company.contentTypes ?? [],
+          });
+        }
+      })
+      .catch(() => setCompany(null))
+      .finally(() => setLoading(false));
+  }, [id]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/companies/${id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setCompany(d.company);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggleType = (t: ScriptType) => {
+    setForm((prev) => ({
+      ...prev,
+      contentTypes: prev.contentTypes.includes(t)
+        ? prev.contentTypes.filter((x) => x !== t)
+        : [...prev.contentTypes, t],
+    }));
+  };
+
+  const handleScriptStatus = async (scriptId: string, status: string) => {
+    await fetch(`/api/scripts/${scriptId}/status`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ status }),
+    });
+    setScripts((prev) =>
+      prev.map((s) => (s.id === scriptId ? { ...s, status: status as ScriptRow["status"] } : s))
+    );
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen text-olive-muted text-sm uppercase tracking-widest">
+        Chargement…
+      </div>
+    );
+  }
+
+  if (!company) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <p className="text-olive-muted mb-4">Entreprise introuvable</p>
+          <Link href="/companies" className="text-olive underline text-sm">← Retour</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const validatedCount = scripts.filter((s) => ["validated", "in_production", "filmed"].includes(s.status)).length;
+  const profileScore = [
+    company.description,
+    company.communicationStyle,
+    company.targetAudience,
+    company.servicesProducts,
+    company.brandVoice,
+    company.contentTypes?.length,
+  ].filter(Boolean).length;
+
+  return (
+    <div className="flex flex-col h-screen overflow-hidden bg-cream">
+      {/* Header */}
+      <div className="bg-cream-card border-b border-olive/10 px-8 py-6 flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-4">
+          <Link href="/companies" className="text-olive-muted hover:text-olive text-sm transition-colors">
+            ← Entreprises
+          </Link>
+          <span className="text-olive/20">/</span>
+          <div>
+            <h1 className="font-display text-2xl text-olive tracking-wider">{company.name ?? company.domain}</h1>
+            <p className="text-olive-muted text-xs">{company.domain} · {company.niche && <span className="text-lime-dark">{company.niche}</span>}</p>
+          </div>
+        </div>
+
+        {/* Stats bar */}
+        <div className="flex items-center gap-6">
+          <Stat label="Générations" value={history.length} />
+          <Stat label="Validés" value={validatedCount} accent />
+          <Stat label="Packages" value={packages.length} />
+          <div className="text-center">
+            <div className="font-display text-olive text-base tracking-wider">{profileScore}/6</div>
+            <div className="text-olive-light text-[9px] uppercase tracking-widest">Profil</div>
+            <div className="w-12 h-1 bg-olive/10 rounded-full mt-1 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-lime transition-all"
+                style={{ width: `${(profileScore / 6) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-cream-card border-b border-olive/10 px-8 flex gap-1 shrink-0">
+        {(["profil", "packages", "scripts"] as Tab[]).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={`px-4 py-3 text-[10px] font-display tracking-widest uppercase border-b-2 transition-all ${
+              tab === t
+                ? "border-olive text-olive"
+                : "border-transparent text-olive-muted hover:text-olive"
+            }`}
+          >
+            {t === "profil" && "◈ PROFIL"}
+            {t === "packages" && `▦ PACKAGES (${packages.length})`}
+            {t === "scripts" && `✓ SCRIPTS (${scripts.length})`}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-8">
+        {/* ── PROFIL TAB ──────────────────────────────────────── */}
+        {tab === "profil" && (
+          <div className="max-w-2xl space-y-5">
+            {saved && (
+              <div className="flex items-center gap-2 bg-olive text-lime rounded-xl px-4 py-3 text-sm font-display tracking-widest animate-fade-in">
+                ✓ Profil sauvegardé — sera utilisé pour les prochaines générations
+              </div>
+            )}
+
+            <div className="bg-white border-2 border-olive/10 rounded-2xl p-6 space-y-5">
+              <SectionTitle>Identité</SectionTitle>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Nom de l'entreprise">
+                  <Input value={form.name} onChange={(v) => setForm((p) => ({ ...p, name: v }))} placeholder="Studio Savora" />
+                </Field>
+                <Field label="Niche / Secteur">
+                  <Input value={form.niche} onChange={(v) => setForm((p) => ({ ...p, niche: v }))} placeholder="skincare, SaaS…" />
+                </Field>
+              </div>
+
+              <Field label="Description de la marque">
+                <Textarea
+                  value={form.description}
+                  onChange={(v) => setForm((p) => ({ ...p, description: v }))}
+                  placeholder="Qui sont-ils ? Que font-ils ? Quelle est leur mission ?"
+                  rows={3}
+                />
+              </Field>
+            </div>
+
+            <div className="bg-white border-2 border-olive/10 rounded-2xl p-6 space-y-5">
+              <SectionTitle>Communication & Audience</SectionTitle>
+
+              <Field label="Style de communication">
+                <Input
+                  value={form.communicationStyle}
+                  onChange={(v) => setForm((p) => ({ ...p, communicationStyle: v }))}
+                  placeholder="Ex: Casual et engagé, Expert et sérieux, Humour et proximité…"
+                />
+              </Field>
+
+              <Field label="Cible principale">
+                <Input
+                  value={form.targetAudience}
+                  onChange={(v) => setForm((p) => ({ ...p, targetAudience: v }))}
+                  placeholder="Ex: Femmes 25-45 ans actives, Hommes 18-35 ans gamers…"
+                />
+              </Field>
+
+              <Field label="Personnalité de marque (brand voice)">
+                <Input
+                  value={form.brandVoice}
+                  onChange={(v) => setForm((p) => ({ ...p, brandVoice: v }))}
+                  placeholder="Ex: Bienveillante, ambitieuse, disruptive, authentique…"
+                />
+              </Field>
+            </div>
+
+            <div className="bg-white border-2 border-olive/10 rounded-2xl p-6 space-y-5">
+              <SectionTitle>Produits & Contenu</SectionTitle>
+
+              <Field label="Produits / Services">
+                <Textarea
+                  value={form.servicesProducts}
+                  onChange={(v) => setForm((p) => ({ ...p, servicesProducts: v }))}
+                  placeholder="Décris ce qu'ils vendent : produits phares, gamme, prix, différenciants…"
+                  rows={3}
+                />
+              </Field>
+
+              <div>
+                <Label>Types de contenu préférés</Label>
+                <div className="flex gap-2 mt-2 flex-wrap">
+                  {CONTENT_TYPES.map((t) => (
+                    <button
+                      key={t.value}
+                      onClick={() => toggleType(t.value)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg border-2 text-[10px] font-display tracking-widest transition-all ${
+                        form.contentTypes.includes(t.value)
+                          ? "bg-olive border-olive text-lime"
+                          : "bg-cream-input border-olive/15 text-olive-muted hover:border-olive/30"
+                      }`}
+                    >
+                      <span>{t.icon}</span> {t.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end">
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="bg-olive hover:bg-olive-dark disabled:opacity-50 text-white font-display tracking-widest text-sm rounded-xl px-6 py-3 transition-all"
+              >
+                {saving ? "SAUVEGARDE…" : "✓ SAUVEGARDER LE PROFIL"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── PACKAGES TAB ─────────────────────────────────── */}
+        {tab === "packages" && (
+          <div className="max-w-3xl">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-display text-xl text-olive tracking-wider">PACKAGES</h2>
+              <button
+                onClick={() => setShowCreatePackage(true)}
+                className="flex items-center gap-2 bg-olive hover:bg-olive-dark text-white font-display tracking-widest text-sm rounded-xl px-4 py-2.5 transition-all"
+              >
+                + NOUVEAU PACKAGE
+              </button>
+            </div>
+
+            {packages.length === 0 ? (
+              <EmptyState icon="▦" title="AUCUN PACKAGE" description="Crée un package pour organiser les scripts de ce client" />
+            ) : (
+              <div className="space-y-3">
+                {packages.map((pkg) => (
+                  <div key={pkg.id} className="bg-white border-2 border-olive/10 rounded-2xl p-5">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h3 className="font-display text-olive text-lg tracking-wider">{pkg.name}</h3>
+                          <span className={`text-[9px] font-display tracking-widest px-2 py-0.5 rounded-full border ${STATUS_CONFIG[pkg.status].color}`}>
+                            {STATUS_CONFIG[pkg.status].label}
+                          </span>
+                        </div>
+                        <p className="text-olive-muted text-xs">
+                          {pkg.scriptType.toUpperCase().replace("_", " ")} · {pkg.totalScripts ?? 0}/{pkg.scriptCount} scripts
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        {(["active", "filming", "completed"] as PackageStatus[]).map((s) => (
+                          <button
+                            key={s}
+                            onClick={() => {
+                              fetch(`/api/packages/${pkg.id}/status`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ status: s }),
+                              }).then(() =>
+                                setPackages((prev) =>
+                                  prev.map((p) => (p.id === pkg.id ? { ...p, status: s } : p))
+                                )
+                              );
+                            }}
+                            className={`text-[9px] font-display tracking-widest px-2.5 py-1.5 rounded-lg border-2 transition-all ${
+                              pkg.status === s
+                                ? STATUS_CONFIG[s].color
+                                : "border-olive/10 text-olive-light hover:border-olive/30"
+                            }`}
+                          >
+                            {STATUS_CONFIG[s].label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Progress bar */}
+                    {pkg.scriptCount > 0 && (
+                      <div className="mt-3">
+                        <div className="flex justify-between text-[9px] text-olive-light mb-1">
+                          <span>{pkg.validatedCount ?? 0} validés</span>
+                          <span>{pkg.filmedCount ?? 0} filmés</span>
+                        </div>
+                        <div className="h-1.5 bg-olive/8 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-lime rounded-full transition-all"
+                            style={{ width: `${Math.min(100, ((pkg.filmedCount ?? 0) / pkg.scriptCount) * 100)}%` }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SCRIPTS TAB ──────────────────────────────────── */}
+        {tab === "scripts" && (
+          <div className="max-w-4xl">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-display text-xl text-olive tracking-wider">
+                SCRIPTS ({scripts.length})
+              </h2>
+              <Link
+                href={`/?companyId=${id}`}
+                className="flex items-center gap-2 bg-lime/15 hover:bg-lime/25 border-2 border-lime/30 text-olive font-display tracking-widest text-sm rounded-xl px-4 py-2.5 transition-all"
+              >
+                ✦ GÉNÉRER POUR CE CLIENT
+              </Link>
+            </div>
+
+            {scripts.length === 0 ? (
+              <EmptyState
+                icon="✦"
+                title="AUCUN SCRIPT"
+                description="Génère des scripts pour ce client depuis la page Générer"
+              />
+            ) : (
+              <div className="space-y-2">
+                {scripts.map((s) => (
+                  <div key={s.id} className="bg-white border-2 border-olive/10 rounded-xl p-4 flex items-start gap-4">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-base">{ANGLE_LABELS[s.angle]?.emoji}</span>
+                      <div>
+                        <div className="text-[9px] font-display tracking-widest text-olive-muted">
+                          {ANGLE_LABELS[s.angle]?.label}
+                        </div>
+                        {s.packageName && (
+                          <div className="text-[9px] text-olive-light">{s.packageName}</div>
+                        )}
+                      </div>
+                    </div>
+
+                    <p className="flex-1 text-xs text-olive-muted line-clamp-2 leading-relaxed">
+                      {s.content.replace(/#+\s/g, "").replace(/\*/g, "").slice(0, 150)}…
+                    </p>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className={`text-[9px] font-display tracking-widest px-2 py-1 rounded-lg border ${SCRIPT_STATUS_CONFIG[s.status].color}`}>
+                        {SCRIPT_STATUS_CONFIG[s.status].label}
+                      </span>
+                      <select
+                        value={s.status}
+                        onChange={(e) => handleScriptStatus(s.id, e.target.value)}
+                        className="text-[10px] bg-cream-input border border-olive/15 rounded-lg px-2 py-1 text-olive-muted focus:outline-none focus:border-olive"
+                      >
+                        <option value="generated">Généré</option>
+                        <option value="validated">Validé</option>
+                        <option value="in_production">En production</option>
+                        <option value="filmed">Filmé</option>
+                      </select>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {showCreatePackage && (
+        <CreatePackageModal
+          companyId={id}
+          onClose={() => setShowCreatePackage(false)}
+          onCreate={(pkg) => {
+            setPackages((prev) => [pkg, ...prev]);
+            setShowCreatePackage(false);
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ─── Create Package Modal ──────────────────────────────────── */
+
+function CreatePackageModal({
+  companyId,
+  onClose,
+  onCreate,
+}: {
+  companyId: string;
+  onClose: () => void;
+  onCreate: (p: PackageRow) => void;
+}) {
+  const [name, setName] = useState("");
+  const [scriptType, setScriptType] = useState<ScriptType>("ugc");
+  const [scriptCount, setScriptCount] = useState("5");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async () => {
+    if (!name.trim()) { setError("Le nom est requis."); return; }
+    setLoading(true);
+    setError("");
+    try {
+      const res = await fetch("/api/packages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ companyId, name, scriptType, scriptCount: parseInt(scriptCount) || 0 }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      const d = await res.json();
+      onCreate(d.package);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-olive/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-cream-card border-2 border-olive/15 rounded-2xl w-full max-w-md">
+        <div className="px-6 py-5 border-b border-olive/10 flex items-center justify-between">
+          <h2 className="font-display text-xl text-olive tracking-wider">NOUVEAU PACKAGE</h2>
+          <button onClick={onClose} className="text-olive-muted hover:text-olive">✕</button>
+        </div>
+        <div className="px-6 py-5 space-y-4">
+          <Field label="Nom du package">
+            <Input value={name} onChange={setName} placeholder="Ex: Pack Juin 2025 — 8 scripts UGC" />
+          </Field>
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Type de script">
+              <select
+                value={scriptType}
+                onChange={(e) => setScriptType(e.target.value as ScriptType)}
+                className="w-full bg-cream-input border-2 border-olive/15 rounded-xl px-3 py-2.5 text-olive text-sm focus:border-olive transition-colors"
+              >
+                {CONTENT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Nbre de scripts">
+              <Input value={scriptCount} onChange={setScriptCount} placeholder="5" />
+            </Field>
+          </div>
+          {error && <p className="text-red-500 text-xs">{error}</p>}
+        </div>
+        <div className="px-6 pb-6 flex gap-3">
+          <button onClick={onClose} className="flex-1 py-3 rounded-xl border-2 border-olive/15 text-olive-muted text-sm font-display tracking-widest">ANNULER</button>
+          <button onClick={handleSubmit} disabled={loading} className="flex-1 py-3 rounded-xl bg-olive text-white text-sm font-display tracking-widest disabled:opacity-50">
+            {loading ? "CRÉATION…" : "CRÉER"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── UI helpers ─────────────────────────────────────────────── */
+
+function Stat({ label, value, accent }: { label: string; value: number; accent?: boolean }) {
+  return (
+    <div className="text-center">
+      <div className={`font-display text-base tracking-wider ${accent ? "text-lime-dark" : "text-olive"}`}>{value}</div>
+      <div className="text-olive-light text-[9px] uppercase tracking-widest">{label}</div>
+    </div>
+  );
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="font-display text-olive tracking-wider text-base border-b border-olive/10 pb-3">
+      {children}
+    </h3>
+  );
+}
+
+function Label({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="text-olive text-[10px] font-semibold uppercase tracking-[0.2em] mb-1.5">
+      {children}
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <Label>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function Input({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      className="w-full bg-cream-input border-2 border-olive/15 rounded-xl px-3.5 py-2.5 text-olive placeholder-olive-light text-sm focus:border-olive transition-colors"
+    />
+  );
+}
+
+function Textarea({ value, onChange, placeholder, rows = 3 }: { value: string; onChange: (v: string) => void; placeholder?: string; rows?: number }) {
+  return (
+    <textarea
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      placeholder={placeholder}
+      rows={rows}
+      className="w-full bg-cream-input border-2 border-olive/15 rounded-xl px-3.5 py-2.5 text-olive placeholder-olive-light text-sm focus:border-olive transition-colors resize-none"
+    />
+  );
+}
+
+function EmptyState({ icon, title, description }: { icon: string; title: string; description: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-16 text-center">
+      <div className="w-16 h-16 rounded-2xl bg-olive/8 flex items-center justify-center mx-auto mb-4">
+        <span className="text-2xl opacity-30">{icon}</span>
+      </div>
+      <h3 className="font-display text-xl text-olive tracking-wider mb-2">{title}</h3>
+      <p className="text-olive-muted text-sm max-w-xs">{description}</p>
+    </div>
+  );
+}

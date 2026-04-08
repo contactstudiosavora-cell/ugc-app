@@ -3,8 +3,10 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   extractDomain,
   upsertCompany,
+  getCompanyById,
   buildLearningContext,
   insertGeneration,
+  createScripts,
 } from "@/lib/database";
 import type { ScriptType, Duration, ScriptAngle } from "@/lib/types";
 import { randomUUID } from "crypto";
@@ -313,6 +315,8 @@ export async function POST(request: NextRequest) {
       instructions,
       scriptType = "ugc",
       duration = "30-60",
+      companyId: explicitCompanyId,
+      packageId,
     } = body as {
       url?: string;
       niche?: string;
@@ -320,6 +324,8 @@ export async function POST(request: NextRequest) {
       instructions?: string;
       scriptType?: ScriptType;
       duration?: Duration;
+      companyId?: string;
+      packageId?: string;
     };
 
     if (!url && !niche && !description) {
@@ -329,21 +335,33 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Resolve company from URL
-    let companyId: string | null = null;
+    // Resolve company: prefer explicit companyId, then auto-detect from URL
+    let companyId: string | null = explicitCompanyId ?? null;
     let companyDomain: string | null = null;
     let learningContext = "";
 
-    if (url) {
+    if (explicitCompanyId) {
+      // Explicit company selected from UI
+      try {
+        const company = await getCompanyById(explicitCompanyId);
+        if (company) {
+          companyDomain = company.domain;
+          learningContext = await buildLearningContext(explicitCompanyId, company);
+        }
+      } catch {
+        // Non-blocking
+      }
+    } else if (url) {
+      // Auto-detect company from URL
       const domain = extractDomain(url);
       if (domain) {
         try {
           const company = await upsertCompany(domain, niche);
           companyId = company.id;
           companyDomain = company.domain;
-          learningContext = await buildLearningContext(companyId);
+          learningContext = await buildLearningContext(companyId, company);
         } catch {
-          // Non-blocking — company lookup is best-effort
+          // Non-blocking
         }
       }
     }
@@ -438,11 +456,14 @@ Retourne UNIQUEMENT les 3 scripts avec les délimiteurs <<<>>>. Aucune explicati
 
     // Persist to MongoDB
     const id = randomUUID();
+    let scriptIds: string[] = [];
+
     try {
       await insertGeneration({
         id,
         companyId,
         companyDomain,
+        packageId: packageId ?? null,
         scriptType,
         duration,
         inputUrl: url ?? null,
@@ -454,13 +475,24 @@ Retourne UNIQUEMENT les 3 scripts avec les délimiteurs <<<>>>. Aucune explicati
         outputTokens,
         scripts,
       });
+
+      // Create individual script documents if we have a company
+      if (companyId) {
+        const scriptRows = await createScripts({
+          companyId,
+          packageId: packageId ?? null,
+          generationId: id,
+          scripts,
+        });
+        scriptIds = scriptRows.map((s) => s.id);
+      }
     } catch (dbErr: unknown) {
-      // Log the error so it appears in Vercel logs — but don't fail the request
-      console.error("⚠️ MongoDB insertGeneration error:", dbErr instanceof Error ? dbErr.message : String(dbErr));
+      console.error("⚠️ MongoDB error:", dbErr instanceof Error ? dbErr.message : String(dbErr));
     }
 
     return NextResponse.json({
       id,
+      scriptIds,
       scripts,
       cost: {
         thisRequest: parseFloat(cost.toFixed(6)),

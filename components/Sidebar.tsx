@@ -12,8 +12,11 @@ interface BudgetStats {
 }
 
 const NAV = [
-  { href: "/", label: "GÉNÉRER", icon: "✦" },
-  { href: "/history", label: "HISTORIQUE", icon: "◈" },
+  { href: "/", label: "GÉNÉRER", icon: "✦", exact: true },
+  { href: "/companies", label: "ENTREPRISES", icon: "◈" },
+  { href: "/packages", label: "PACKAGES", icon: "▦" },
+  { href: "/production", label: "PRODUCTION", icon: "▶" },
+  { href: "/history", label: "HISTORIQUE", icon: "◑" },
 ];
 
 export default function Sidebar() {
@@ -42,7 +45,7 @@ export default function Sidebar() {
               UGC SCRIPTS
             </div>
             <div className="text-white/30 text-[10px] mt-0.5 font-sans uppercase tracking-widest">
-              Powered by Claude AI
+              Studio Savora
             </div>
           </div>
         </div>
@@ -51,8 +54,9 @@ export default function Sidebar() {
       {/* Nav */}
       <nav className="flex-1 px-3 py-5 space-y-1 sidebar-scroll overflow-y-auto">
         {NAV.map((link) => {
-          const isActive =
-            link.href === "/" ? pathname === "/" : pathname.startsWith(link.href);
+          const isActive = link.exact
+            ? pathname === link.href
+            : pathname.startsWith(link.href);
           return (
             <Link
               key={link.href}

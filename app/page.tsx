@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import type { ScriptType, Duration, ScriptAngle, CostInfo } from "@/lib/types";
+import { useState, useEffect } from "react";
+import type { ScriptType, Duration, ScriptAngle, CostInfo, CompanyRow, PackageRow } from "@/lib/types";
 import ScriptRenderer from "@/components/ScriptRenderer";
 
 /* ─── Config ─────────────────────────────────────────────────── */
@@ -36,24 +36,50 @@ export default function Home() {
   const [scriptType, setScriptType] = useState<ScriptType>("ugc");
   const [duration, setDuration] = useState<Duration>("30-60");
 
+  // Company & Package selectors
+  const [companies, setCompanies] = useState<CompanyRow[]>([]);
+  const [packages, setPackages] = useState<PackageRow[]>([]);
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>("");
+  const [selectedPackageId, setSelectedPackageId] = useState<string>("");
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [scripts, setScripts] = useState<Record<ScriptAngle, string> | null>(null);
   const [cost, setCost] = useState<CostInfo | null>(null);
   const [genId, setGenId] = useState<string | null>(null);
+  const [scriptIds, setScriptIds] = useState<string[]>([]);
 
   const [activeAngle, setActiveAngle] = useState<ScriptAngle>("emotional");
   const [copied, setCopied] = useState(false);
   const [editInstruction, setEditInstruction] = useState("");
   const [editing, setEditing] = useState(false);
-  // null = not validated, ScriptAngle = which angle has been validated
   const [validatedAngle, setValidatedAngle] = useState<ScriptAngle | null>(null);
   const [validateFeedback, setValidateFeedback] = useState<string | null>(null);
+
+  // Load companies on mount
+  useEffect(() => {
+    fetch("/api/companies")
+      .then((r) => r.json())
+      .then((d) => setCompanies(d.companies ?? []))
+      .catch(() => null);
+  }, []);
+
+  // Load packages when company changes
+  useEffect(() => {
+    setSelectedPackageId("");
+    if (!selectedCompanyId) { setPackages([]); return; }
+    fetch(`/api/packages?companyId=${selectedCompanyId}`)
+      .then((r) => r.json())
+      .then((d) => setPackages(d.packages ?? []))
+      .catch(() => setPackages([]));
+  }, [selectedCompanyId]);
+
+  const selectedCompany = companies.find((c) => c.id === selectedCompanyId);
 
   /* ─── Handlers ──────────────────────────────────────────────── */
 
   const handleGenerate = async () => {
-    if (!url && !niche && !description) {
+    if (!url && !niche && !description && !selectedCompanyId) {
       setError("Renseigne au moins un champ pour générer les scripts.");
       return;
     }
@@ -64,12 +90,22 @@ export default function Home() {
     setValidatedAngle(null);
     setValidateFeedback(null);
     setGenId(null);
+    setScriptIds([]);
 
     try {
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url, niche, description, instructions, scriptType, duration }),
+        body: JSON.stringify({
+          url,
+          niche,
+          description,
+          instructions,
+          scriptType,
+          duration,
+          companyId: selectedCompanyId || undefined,
+          packageId: selectedPackageId || undefined,
+        }),
       });
       if (!res.ok) {
         const err = await res.json();
@@ -79,6 +115,7 @@ export default function Home() {
       setScripts(data.scripts);
       setCost(data.cost);
       setGenId(data.id ?? null);
+      setScriptIds(data.scriptIds ?? []);
       setActiveAngle("emotional");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Une erreur est survenue.");
@@ -125,14 +162,28 @@ export default function Home() {
   };
 
   const handleValidate = async (angle: ScriptAngle) => {
-    if (!genId) return;
-    // Toggle: if clicking the already-validated angle → unvalidate
+    // Validate via script entity if we have scriptIds, else via legacy generation
+    const angleIndex = ANGLES.findIndex((a) => a.type === angle);
+    const scriptId = scriptIds[angleIndex];
+
     const newVal = validatedAngle === angle ? null : angle;
-    await fetch("/api/history", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id: genId, validated: newVal }),
-    }).catch(() => null);
+
+    if (scriptId && newVal) {
+      // Mark the specific script as validated
+      await fetch(`/api/scripts/${scriptId}/status`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "validated" }),
+      }).catch(() => null);
+    } else if (genId) {
+      // Legacy: mark validation on generation
+      await fetch("/api/history", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: genId, validated: newVal }),
+      }).catch(() => null);
+    }
+
     setValidatedAngle(newVal);
     if (newVal) {
       const label = ANGLES.find(a => a.type === newVal)?.label ?? newVal;
@@ -166,6 +217,58 @@ export default function Home() {
         </div>
 
         <div className="px-6 py-5 space-y-6 flex-1">
+
+          {/* ── COMPANY SELECTOR ── */}
+          <section>
+            <FieldLabel>Entreprise cliente</FieldLabel>
+            <select
+              value={selectedCompanyId}
+              onChange={(e) => setSelectedCompanyId(e.target.value)}
+              className="mt-2 w-full bg-cream-input border-2 border-olive/15 rounded-xl px-3.5 py-2.5 text-olive text-sm focus:border-olive transition-colors"
+            >
+              <option value="">— Génération libre (sans entreprise) —</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name ?? c.domain} {c.niche ? `· ${c.niche}` : ""}
+                </option>
+              ))}
+            </select>
+
+            {/* Company profile badge */}
+            {selectedCompany && (
+              <div className="mt-2 bg-lime/10 border border-lime/30 rounded-xl px-3 py-2.5">
+                <div className="flex items-center gap-1.5 mb-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-lime-dark inline-block" />
+                  <span className="text-[9px] font-display tracking-widest text-olive uppercase">
+                    PROFIL CHARGÉ — Génération intelligente active
+                  </span>
+                </div>
+                {selectedCompany.communicationStyle && (
+                  <p className="text-[10px] text-olive-muted">Style : {selectedCompany.communicationStyle}</p>
+                )}
+                {selectedCompany.targetAudience && (
+                  <p className="text-[10px] text-olive-muted">Cible : {selectedCompany.targetAudience}</p>
+                )}
+              </div>
+            )}
+          </section>
+
+          {/* ── PACKAGE SELECTOR ── */}
+          {selectedCompanyId && packages.length > 0 && (
+            <section>
+              <FieldLabel>Package <Opt /></FieldLabel>
+              <select
+                value={selectedPackageId}
+                onChange={(e) => setSelectedPackageId(e.target.value)}
+                className="mt-2 w-full bg-cream-input border-2 border-olive/15 rounded-xl px-3.5 py-2.5 text-olive text-sm focus:border-olive transition-colors"
+              >
+                <option value="">— Aucun package —</option>
+                {packages.map((p) => (
+                  <option key={p.id} value={p.id}>{p.name}</option>
+                ))}
+              </select>
+            </section>
+          )}
 
           {/* Script type */}
           <section>
@@ -224,7 +327,7 @@ export default function Home() {
 
           {/* URL */}
           <section>
-            <FieldLabel>URL du produit</FieldLabel>
+            <FieldLabel>URL du produit <Opt /></FieldLabel>
             <div className="relative mt-2">
               <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-olive-light text-sm pointer-events-none">
                 🔗
@@ -292,12 +395,21 @@ export default function Home() {
             {loading ? (
               <><Spinner /><span>GÉNÉRATION EN COURS…</span></>
             ) : (
-              <><span>GÉNÉRER LES SCRIPTS</span><span className="text-lime">✦</span></>
+              <>
+                <span>GÉNÉRER LES SCRIPTS</span>
+                <span className="text-lime">{selectedCompanyId ? "★" : "✦"}</span>
+              </>
             )}
           </button>
-          <p className="text-center text-olive-light text-[10px] mt-2.5 uppercase tracking-widest">
-            ~$0.002 par génération · Budget $5/mois
-          </p>
+          {selectedCompanyId ? (
+            <p className="text-center text-lime-dark text-[10px] mt-2.5 uppercase tracking-widest">
+              Génération intelligente · Profil {selectedCompany?.name} chargé
+            </p>
+          ) : (
+            <p className="text-center text-olive-light text-[10px] mt-2.5 uppercase tracking-widest">
+              ~$0.002 par génération · Budget $5/mois
+            </p>
+          )}
         </div>
       </div>
 
@@ -313,10 +425,20 @@ export default function Home() {
               <h3 className="font-display text-2xl text-olive tracking-wider mb-2">
                 PRÊT À GÉNÉRER
               </h3>
-              <p className="text-olive-muted text-sm max-w-[260px] mx-auto leading-relaxed">
-                Configure le formulaire et clique sur{" "}
-                <strong className="text-olive">GÉNÉRER LES SCRIPTS</strong>
+              <p className="text-olive-muted text-sm max-w-[280px] mx-auto leading-relaxed">
+                {companies.length > 0
+                  ? "Sélectionne une entreprise pour une génération intelligente, ou génère librement"
+                  : "Configure le formulaire et clique sur GÉNÉRER LES SCRIPTS"}
               </p>
+              {companies.length === 0 && (
+                <p className="text-olive-light text-xs mt-3">
+                  💡 Crée une entreprise dans{" "}
+                  <a href="/companies" className="underline hover:text-olive transition-colors">
+                    Entreprises
+                  </a>{" "}
+                  pour des scripts encore plus précis
+                </p>
+              )}
             </div>
           </div>
         ) : (
@@ -335,6 +457,12 @@ export default function Home() {
                   <span className="text-olive-muted font-mono">${cost.totalThisMonth.toFixed(4)}</span>
                   <span className="w-px h-3 bg-olive/10" />
                   <span className="text-olive-light text-[10px]">{cost.inputTokens + cost.outputTokens} tokens</span>
+                  {selectedCompany && (
+                    <>
+                      <span className="w-px h-3 bg-olive/10" />
+                      <span className="text-lime-dark text-[10px]">★ {selectedCompany.name}</span>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -363,7 +491,9 @@ export default function Home() {
                   <span className="text-olive font-display tracking-wider text-sm">
                     SCRIPT {ANGLES.find(a => a.type === validatedAngle)?.label} VALIDÉ
                   </span>
-                  <span className="text-olive-muted text-[10px] ml-2">— Sauvegardé dans l&apos;historique</span>
+                  <span className="text-olive-muted text-[10px] ml-2">
+                    — {selectedCompanyId ? "Enrichit l'apprentissage pour ce client" : "Sauvegardé dans l'historique"}
+                  </span>
                 </div>
               </div>
             )}
@@ -409,6 +539,7 @@ export default function Home() {
                     </div>
                     <div className="text-olive-light text-[10px] uppercase tracking-widest mt-0.5">
                       {SCRIPT_TYPES.find(t => t.type === scriptType)?.label} · {duration}s
+                      {selectedCompany && ` · ${selectedCompany.name}`}
                     </div>
                   </div>
                 </div>
@@ -421,16 +552,15 @@ export default function Home() {
                   {validatedAngle === activeAngle ? (
                     <button
                       onClick={() => handleValidate(activeAngle)}
-                      disabled={!genId}
+                      disabled={!genId && scriptIds.length === 0}
                       className="flex items-center gap-1.5 bg-lime/20 border-2 border-lime/50 text-olive hover:bg-red-50 hover:border-red-300 hover:text-red-500 rounded-xl px-3 py-1.5 text-[10px] font-display tracking-widest transition-all disabled:opacity-40"
-                      title="Cliquer pour retirer la validation"
                     >
                       ✓ VALIDÉ — RETIRER
                     </button>
                   ) : (
                     <OutlineBtn
                       onClick={() => handleValidate(activeAngle)}
-                      disabled={!genId}
+                      disabled={!genId && scriptIds.length === 0}
                       highlight
                     >
                       {validatedAngle ? "⇄ CHANGER" : "✓ VALIDER"}
@@ -480,6 +610,11 @@ export default function Home() {
                     {tag}
                   </span>
                 ))}
+                {selectedCompanyId && (
+                  <span className="bg-lime/15 border border-lime/30 text-olive text-[10px] uppercase tracking-widest rounded-full px-3 py-1 font-sans">
+                    ★ Génération intelligente
+                  </span>
+                )}
               </div>
             </div>
           </div>

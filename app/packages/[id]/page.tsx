@@ -36,6 +36,34 @@ export default function PackageDetailPage() {
   const [scripts, setScripts] = useState<ScriptRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewingScript, setViewingScript] = useState<ScriptRow | null>(null);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [showShareModal, setShowShareModal] = useState(false);
+
+  const generateShareLink = async () => {
+    setGeneratingLink(true);
+    try {
+      const res = await fetch(`/api/packages/${id}/share`, {
+        method: "POST",
+      });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const link = `${window.location.origin}/share/package/${data.shareToken}`;
+      setShareLink(link);
+      setShowShareModal(true);
+    } catch {
+      alert("Erreur lors de la génération du lien");
+    } finally {
+      setGeneratingLink(false);
+    }
+  };
+
+  const copyShareLink = () => {
+    if (shareLink) {
+      navigator.clipboard.writeText(shareLink);
+      alert("Lien copié dans le presse-papiers !");
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -104,6 +132,13 @@ export default function PackageDetailPage() {
           <span>🎯 Objectif : {pkg.scriptCount} scripts</span>
           <span>✅ {scripts.filter((s) => s.status === "validated" || s.status === "in_production" || s.status === "filmed").length} validés</span>
           <span>🎬 {scripts.filter((s) => s.status === "filmed").length} filmés</span>
+          <button
+            onClick={generateShareLink}
+            disabled={generatingLink}
+            className="ml-auto flex items-center gap-2 bg-lime/15 hover:bg-lime/25 border-2 border-lime/30 text-olive font-display tracking-widest text-xs rounded-xl px-4 py-2 transition-all disabled:opacity-40"
+          >
+            {generatingLink ? "..." : "🔗 PARTAGER AVEC CLIENT"}
+          </button>
         </div>
       </div>
 
@@ -210,6 +245,54 @@ export default function PackageDetailPage() {
               <button
                 onClick={() => setViewingScript(null)}
                 className="text-[10px] font-display tracking-widest bg-olive hover:bg-olive-dark text-white rounded-lg px-4 py-2 transition-all"
+              >
+                FERMER
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Share Link Modal */}
+      {showShareModal && shareLink && (
+        <div
+          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-8"
+          onClick={() => setShowShareModal(false)}
+        >
+          <div
+            className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-display text-2xl text-olive tracking-wider">
+                🔗 LIEN DE PARTAGE
+              </h2>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="text-olive-muted hover:text-olive text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <p className="text-olive-muted text-sm mb-4">
+              Partagez ce lien avec votre client pour qu'il puisse réviser les scripts, ajouter des commentaires et valider le package.
+            </p>
+
+            <div className="bg-cream-input border-2 border-olive/15 rounded-xl p-4 mb-6 break-all text-olive-muted text-sm font-mono">
+              {shareLink}
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={copyShareLink}
+                className="flex-1 bg-lime hover:bg-lime-dark text-olive font-display tracking-widest text-sm rounded-xl px-6 py-3 transition-all"
+              >
+                📋 COPIER LE LIEN
+              </button>
+              <button
+                onClick={() => setShowShareModal(false)}
+                className="flex-1 bg-olive/10 hover:bg-olive/20 text-olive font-display tracking-widest text-sm rounded-xl px-6 py-3 transition-all"
               >
                 FERMER
               </button>

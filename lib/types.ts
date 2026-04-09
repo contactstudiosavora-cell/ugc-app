@@ -98,6 +98,7 @@ export interface PackageDoc {
   status: PackageStatus;
   /** Target number of scripts in this package */
   scriptCount: number;
+  shareToken?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -110,11 +111,34 @@ export interface PackageRow {
   scriptType: ScriptType;
   status: PackageStatus;
   scriptCount: number;
+  shareToken?: string | null;
   createdAt: string;
   updatedAt: string;
   validatedCount?: number;
   filmedCount?: number;
   totalScripts?: number;
+}
+
+/* ─── Client Feedback ──────────────────────────────────────────── */
+
+export interface ClientFeedbackDoc {
+  _id: string;
+  packageId: string;
+  scriptId: string;
+  modifiedContent: string | null;
+  comments: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface ClientFeedbackRow {
+  id: string;
+  packageId: string;
+  scriptId: string;
+  modifiedContent: string | null;
+  comments: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /* ─── Script ───────────────────────────────────────────────────── */

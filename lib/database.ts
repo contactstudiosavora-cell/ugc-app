@@ -25,6 +25,8 @@ import type {
   HistoryEntry,
   ReferenceScriptDoc,
   ReferenceScriptRow,
+  GlobalReferenceScriptDoc,
+  GlobalReferenceScriptRow,
 } from "./types";
 
 /* ─── Connection caching (Next.js serverless pattern) ──────────── */
@@ -742,6 +744,23 @@ export async function buildLearningContext(
       refs;
   }
 
+  // Global reference scripts (apply to all companies)
+  const globalRefScripts = await listGlobalReferenceScripts();
+  if (globalRefScripts.length > 0) {
+    const globalRefs = globalRefScripts
+      .slice(0, 3)
+      .map((r, i) => `[Modèle global ${i + 1}${r.title ? ` — "${r.title}"` : ""}]\n${r.content.slice(0, 800)}`)
+      .join("\n\n---\n\n");
+
+    context +=
+      `\n\n╔══════════════════════════════════════════════════════╗\n` +
+      `  MODÈLES GLOBAUX DE RÉFÉRENCE (${globalRefScripts.length})\n` +
+      `  → Ces scripts définissent les BEST PRACTICES générales du format UGC.\n` +
+      `  → Adapte leur structure et rythme à chaque nouveau script.\n` +
+      `╚══════════════════════════════════════════════════════╝\n\n` +
+      globalRefs;
+  }
+
   // Patterns to avoid from other companies
   if (globalPatterns.length > 0) {
     const patterns = globalPatterns
@@ -758,6 +777,58 @@ export async function buildLearningContext(
   }
 
   return context;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   GLOBAL REFERENCE SCRIPTS (apply to all companies)
+═══════════════════════════════════════════════════════════════════ */
+
+function docToGlobalReferenceScriptRow(doc: GlobalReferenceScriptDoc): GlobalReferenceScriptRow {
+  return {
+    id: doc._id,
+    title: doc.title,
+    content: doc.content,
+    scriptType: doc.scriptType,
+    sourceType: doc.sourceType,
+    createdAt: toISOSafe(doc.createdAt),
+  };
+}
+
+export async function listGlobalReferenceScripts(): Promise<GlobalReferenceScriptRow[]> {
+  const db = await getDb();
+  const docs = await db
+    .collection<GlobalReferenceScriptDoc>("global_reference_scripts")
+    .find({})
+    .sort({ createdAt: -1 })
+    .toArray();
+  return docs.map(docToGlobalReferenceScriptRow);
+}
+
+export async function createGlobalReferenceScript(data: {
+  title: string;
+  content: string;
+  scriptType: ScriptType | null;
+  sourceType: "manual" | "file";
+}): Promise<GlobalReferenceScriptRow> {
+  const db = await getDb();
+  const doc: GlobalReferenceScriptDoc = {
+    _id: randomUUID(),
+    title: data.title,
+    content: data.content,
+    scriptType: data.scriptType,
+    sourceType: data.sourceType,
+    createdAt: new Date(),
+  };
+  await db.collection<GlobalReferenceScriptDoc>("global_reference_scripts").insertOne(doc);
+  return docToGlobalReferenceScriptRow(doc);
+}
+
+export async function deleteGlobalReferenceScript(id: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db
+    .collection<GlobalReferenceScriptDoc>("global_reference_scripts")
+    .deleteOne({ _id: id });
+  return result.deletedCount > 0;
 }
 
 /* ═══════════════════════════════════════════════════════════════════

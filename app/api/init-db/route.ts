@@ -57,6 +57,10 @@ export async function POST() {
     await db.collection("reference_scripts").createIndex({ companyId: 1, createdAt: -1 }, { background: true });
     results.push("✓ Index reference_scripts (companyId+createdAt)");
 
+    // global_reference_scripts index
+    await db.collection("global_reference_scripts").createIndex({ createdAt: -1 }, { background: true });
+    results.push("✓ Index global_reference_scripts (createdAt)");
+
     /* ── 2. MIGRATE COMPANIES — add new profile fields ─────────── */
 
     const companiesMigrated = await db.collection("companies").updateMany(
@@ -162,6 +166,7 @@ export async function POST() {
     const generationsCount = await db.collection("generations").countDocuments();
     const scriptsCount = await db.collection("scripts").countDocuments();
     const packagesCount = await db.collection("packages").countDocuments();
+    const globalRefScriptsCount = await db.collection("global_reference_scripts").countDocuments();
 
     return NextResponse.json({
       success: true,
@@ -171,6 +176,7 @@ export async function POST() {
         generations: generationsCount,
         scripts: scriptsCount,
         packages: packagesCount,
+        global_reference_scripts: globalRefScriptsCount,
       },
     });
   } catch (e: unknown) {

@@ -194,3 +194,21 @@ export interface ReferenceScriptRow {
   sourceType: "manual" | "file";
   createdAt: string;
 }
+
+export interface GlobalReferenceScriptDoc {
+  _id: string;
+  title: string;
+  content: string;
+  scriptType: ScriptType | null;
+  sourceType: "manual" | "file";
+  createdAt: Date;
+}
+
+export interface GlobalReferenceScriptRow {
+  id: string;
+  title: string;
+  content: string;
+  scriptType: ScriptType | null;
+  sourceType: "manual" | "file";
+  createdAt: string;
+}

@@ -17,6 +17,7 @@ const NAV = [
   { href: "/packages", label: "PACKAGES", icon: "▦" },
   { href: "/production", label: "PRODUCTION", icon: "▶" },
   { href: "/history", label: "HISTORIQUE", icon: "◑" },
+  { href: "/reference-scripts", label: "BIBLIOTHÈQUE", icon: "◎" },
 ];
 
 export default function Sidebar() {

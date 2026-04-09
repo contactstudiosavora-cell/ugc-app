@@ -50,6 +50,11 @@ export default function CompanyDetailPage({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [showCreatePackage, setShowCreatePackage] = useState(false);
+  const [editingScript, setEditingScript] = useState<ScriptRow | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editAiInstruction, setEditAiInstruction] = useState("");
+  const [editAiLoading, setEditAiLoading] = useState(false);
 
   // Editable form state
   const [form, setForm] = useState({
@@ -126,6 +131,50 @@ export default function CompanyDetailPage({
     setScripts((prev) =>
       prev.map((s) => (s.id === scriptId ? { ...s, status: status as ScriptRow["status"] } : s))
     );
+  };
+
+  const handleOpenEdit = (s: ScriptRow) => {
+    setEditingScript(s);
+    setEditContent(s.content ?? "");
+    setEditAiInstruction("");
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingScript) return;
+    setEditSaving(true);
+    try {
+      const res = await fetch(`/api/scripts/${editingScript.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: editContent }),
+      });
+      if (!res.ok) throw new Error();
+      setScripts((prev) => prev.map((s) => s.id === editingScript.id ? { ...s, content: editContent } : s));
+      setEditingScript(null);
+    } catch { /* silent */ }
+    finally { setEditSaving(false); }
+  };
+
+  const handleAiEdit = async () => {
+    if (!editAiInstruction.trim() || !editingScript) return;
+    setEditAiLoading(true);
+    try {
+      const res = await fetch("/api/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          script: editContent,
+          instruction: editAiInstruction,
+          scriptType: editingScript.angle,
+          duration: "30-60",
+        }),
+      });
+      if (!res.ok) throw new Error();
+      const d = await res.json();
+      setEditContent(d.script);
+      setEditAiInstruction("");
+    } catch { /* silent */ }
+    finally { setEditAiLoading(false); }
   };
 
   if (loading) {
@@ -450,6 +499,12 @@ export default function CompanyDetailPage({
                         <option value="in_production">En production</option>
                         <option value="filmed">Filmé</option>
                       </select>
+                      <button
+                        onClick={() => handleOpenEdit(s)}
+                        className="text-[9px] font-display tracking-widest border border-olive/15 hover:border-olive/30 text-olive-muted hover:text-olive rounded-lg px-2.5 py-1.5 transition-all"
+                      >
+                        ✏ ÉDITER
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -468,6 +523,21 @@ export default function CompanyDetailPage({
           />
         )}
       </div>
+
+      {editingScript && (
+        <ScriptEditModal
+          script={editingScript}
+          content={editContent}
+          onContentChange={setEditContent}
+          onSave={handleSaveEdit}
+          saving={editSaving}
+          aiInstruction={editAiInstruction}
+          onAiInstructionChange={setEditAiInstruction}
+          onAiEdit={handleAiEdit}
+          aiLoading={editAiLoading}
+          onClose={() => setEditingScript(null)}
+        />
+      )}
 
       {showCreatePackage && (
         <CreatePackageModal
@@ -848,6 +918,109 @@ function ModelsTab({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ─── Script Edit Modal ──────────────────────────────────────── */
+
+function ScriptEditModal({
+  script,
+  content,
+  onContentChange,
+  onSave,
+  saving,
+  aiInstruction,
+  onAiInstructionChange,
+  onAiEdit,
+  aiLoading,
+  onClose,
+}: {
+  script: ScriptRow;
+  content: string;
+  onContentChange: (v: string) => void;
+  onSave: () => void;
+  saving: boolean;
+  aiInstruction: string;
+  onAiInstructionChange: (v: string) => void;
+  onAiEdit: () => void;
+  aiLoading: boolean;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-olive/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-cream-card border-2 border-olive/15 rounded-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-olive/10 flex items-center justify-between shrink-0">
+          <div>
+            <h2 className="font-display text-lg text-olive tracking-wider">ÉDITER LE SCRIPT</h2>
+            <p className="text-olive-muted text-[10px] uppercase tracking-widest mt-0.5">
+              {ANGLE_LABELS[script.angle]?.emoji} {ANGLE_LABELS[script.angle]?.label}
+              {script.packageName && ` · ${script.packageName}`}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-olive-muted hover:text-olive text-xl transition-colors">✕</button>
+        </div>
+
+        {/* Textarea */}
+        <div className="px-6 py-4 flex-1 overflow-y-auto">
+          <label className="block text-[10px] font-semibold uppercase tracking-[0.15em] text-olive mb-2">
+            Contenu du script — éditable directement
+          </label>
+          <textarea
+            value={content}
+            onChange={(e) => onContentChange(e.target.value)}
+            rows={16}
+            className="w-full bg-cream-input border-2 border-olive/15 rounded-xl px-4 py-3 text-olive text-sm focus:border-olive transition-colors resize-none font-mono leading-relaxed"
+            placeholder="Contenu du script…"
+          />
+        </div>
+
+        {/* AI Edit section */}
+        <div className="px-6 pb-4 shrink-0">
+          <div className="bg-cream border-2 border-olive/8 rounded-xl p-4">
+            <div className="text-[10px] uppercase tracking-[0.2em] font-semibold text-olive-muted mb-2">
+              ✦ Modifier avec l&apos;IA
+            </div>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={aiInstruction}
+                onChange={(e) => onAiInstructionChange(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && onAiEdit()}
+                placeholder="ex: Rends le hook plus percutant, raccourcis la fin…"
+                className="flex-1 bg-cream-input border-2 border-olive/15 rounded-lg px-3 py-2 text-olive placeholder-olive-light text-sm focus:border-olive transition-colors"
+              />
+              <button
+                onClick={onAiEdit}
+                disabled={aiLoading || !aiInstruction.trim()}
+                className="bg-olive hover:bg-olive-dark disabled:opacity-40 disabled:cursor-not-allowed text-white font-display tracking-widest rounded-lg px-4 py-2 text-sm transition-all min-w-[110px] flex items-center justify-center gap-2"
+              >
+                {aiLoading ? <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
+                {aiLoading ? "IA…" : "APPLIQUER"}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 pb-5 flex gap-3 shrink-0 border-t border-olive/10 pt-4">
+          <button
+            onClick={onClose}
+            className="flex-1 bg-cream-input border-2 border-olive/15 text-olive-muted hover:text-olive rounded-xl py-3 text-sm font-display tracking-widest transition-all"
+          >
+            ANNULER
+          </button>
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="flex-1 bg-olive hover:bg-olive-dark disabled:opacity-40 text-white font-display tracking-widest rounded-xl py-3 text-sm transition-all flex items-center justify-center gap-2"
+          >
+            {saving ? <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
+            {saving ? "SAUVEGARDE…" : "💾 SAUVEGARDER"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

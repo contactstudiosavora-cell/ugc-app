@@ -117,7 +117,11 @@ export default function PackagesPage() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {filtered.map((pkg) => (
-              <div key={pkg.id} className="bg-white border-2 border-olive/10 rounded-2xl p-5 flex flex-col">
+              <Link 
+                key={pkg.id} 
+                href={`/packages/${pkg.id}`}
+                className="bg-white border-2 border-olive/10 hover:border-lime/40 rounded-2xl p-5 flex flex-col transition-all cursor-pointer hover:shadow-lg"
+              >
                 {/* Top */}
                 <div className="flex items-start justify-between mb-3">
                   <span className={`text-[9px] font-display tracking-widest px-2.5 py-1 rounded-full border ${STATUS_CONFIG[pkg.status].color}`}>
@@ -125,12 +129,12 @@ export default function PackagesPage() {
                     {STATUS_CONFIG[pkg.status].label}
                   </span>
                   {pkg.companyName && (
-                    <Link
-                      href={`/companies/${pkg.companyId}`}
+                    <div
+                      onClick={(e) => e.stopPropagation()}
                       className="text-[9px] text-olive-light hover:text-olive-muted transition-colors uppercase tracking-widest"
                     >
                       {pkg.companyName}
-                    </Link>
+                    </div>
                   )}
                 </div>
 
@@ -160,11 +164,18 @@ export default function PackagesPage() {
                 </div>
 
                 {/* Status change */}
-                <div className="flex gap-1.5 pt-3 border-t border-olive/8">
+                <div 
+                  className="flex gap-1.5 pt-3 border-t border-olive/8"
+                  onClick={(e) => e.preventDefault()}
+                >
                   {(["active", "filming", "completed"] as PackageStatus[]).map((s) => (
                     <button
                       key={s}
-                      onClick={() => handleStatusChange(pkg.id, s)}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleStatusChange(pkg.id, s);
+                      }}
                       className={`flex-1 text-[9px] font-display tracking-widest py-1.5 rounded-lg border transition-all ${
                         pkg.status === s
                           ? STATUS_CONFIG[s].color
@@ -175,7 +186,7 @@ export default function PackagesPage() {
                     </button>
                   ))}
                 </div>
-              </div>
+              </Link>
             ))}
           </div>
         )}

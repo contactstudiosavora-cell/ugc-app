@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
-import type { CompanyRow, PackageRow, ScriptRow, HistoryEntry, ScriptType, PackageStatus } from "@/lib/types";
+import type { CompanyRow, PackageRow, ScriptRow, HistoryEntry, ScriptType, PackageStatus, ReferenceScriptRow } from "@/lib/types";
 
 const CONTENT_TYPES: { value: ScriptType; label: string; icon: string }[] = [
   { value: "ugc", label: "UGC", icon: "📱" },
@@ -30,7 +30,7 @@ const ANGLE_LABELS = {
   curiosity: { label: "CURIOSITÉ", emoji: "🔥" },
 };
 
-type Tab = "profil" | "packages" | "scripts";
+type Tab = "profil" | "packages" | "scripts" | "modeles";
 
 /* ─── Page ──────────────────────────────────────────────────── */
 
@@ -44,6 +44,7 @@ export default function CompanyDetailPage({
   const [packages, setPackages] = useState<PackageRow[]>([]);
   const [scripts, setScripts] = useState<ScriptRow[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [referenceScripts, setReferenceScripts] = useState<ReferenceScriptRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>("profil");
   const [saving, setSaving] = useState(false);
@@ -70,6 +71,7 @@ export default function CompanyDetailPage({
         setPackages(d.packages ?? []);
         setScripts(d.scripts ?? []);
         setHistory(d.history ?? []);
+        setReferenceScripts(d.referenceScripts ?? []);
         if (d.company) {
           setForm({
             name: d.company.name ?? "",
@@ -190,7 +192,7 @@ export default function CompanyDetailPage({
 
       {/* Tabs */}
       <div className="bg-cream-card border-b border-olive/10 px-8 flex gap-1 shrink-0">
-        {(["profil", "packages", "scripts"] as Tab[]).map((t) => (
+        {(["profil", "packages", "scripts", "modeles"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -203,6 +205,7 @@ export default function CompanyDetailPage({
             {t === "profil" && "◈ PROFIL"}
             {t === "packages" && `▦ PACKAGES (${packages.length})`}
             {t === "scripts" && `✓ SCRIPTS (${scripts.length})`}
+            {t === "modeles" && `◎ MODÈLES (${referenceScripts.length})`}
           </button>
         ))}
       </div>
@@ -454,6 +457,16 @@ export default function CompanyDetailPage({
             )}
           </div>
         )}
+
+        {/* ── MODÈLES TAB ──────────────────────────────────────────── */}
+        {tab === "modeles" && (
+          <ModelsTab
+            companyId={id}
+            referenceScripts={referenceScripts}
+            onAdd={(s) => setReferenceScripts((prev) => [s, ...prev])}
+            onDelete={(sid) => setReferenceScripts((prev) => prev.filter((s) => s.id !== sid))}
+          />
+        )}
       </div>
 
       {showCreatePackage && (
@@ -615,6 +628,226 @@ function EmptyState({ icon, title, description }: { icon: string; title: string;
       </div>
       <h3 className="font-display text-xl text-olive tracking-wider mb-2">{title}</h3>
       <p className="text-olive-muted text-sm max-w-xs">{description}</p>
+    </div>
+  );
+}
+
+/* ─── Models Tab Component ───────────────────────────────────── */
+
+function ModelsTab({
+  companyId,
+  referenceScripts,
+  onAdd,
+  onDelete,
+}: {
+  companyId: string;
+  referenceScripts: ReferenceScriptRow[];
+  onAdd: (s: ReferenceScriptRow) => void;
+  onDelete: (id: string) => void;
+}) {
+  const [mode, setMode] = useState<"text" | "file">("text");
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+  const [scriptType, setScriptType] = useState<ScriptType | "">("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const handleSubmitText = async () => {
+    if (!content.trim()) { setError("Le contenu du script est requis."); return; }
+    setLoading(true); setError("");
+    try {
+      const res = await fetch(`/api/companies/${companyId}/reference-scripts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, content, scriptType: scriptType || null }),
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      const d = await res.json();
+      onAdd(d.script);
+      setTitle(""); setContent(""); setScriptType("");
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erreur");
+    } finally { setLoading(false); }
+  };
+
+  const handleSubmitFile = async (file: File) => {
+    setLoading(true); setError("");
+    try {
+      if (file.type === "application/pdf") {
+        setError("Pour les PDF, veuillez copier-coller le texte dans l&apos;onglet Texte.");
+        setLoading(false); return;
+      }
+      const form = new FormData();
+      form.append("file", file);
+      form.append("title", title || file.name.replace(/\.[^.]+$/, ""));
+      if (scriptType) form.append("scriptType", scriptType);
+      const res = await fetch(`/api/companies/${companyId}/reference-scripts`, {
+        method: "POST",
+        body: form,
+      });
+      if (!res.ok) { const d = await res.json(); throw new Error(d.error); }
+      const d = await res.json();
+      onAdd(d.script);
+      setTitle("");
+      if (fileRef.current) fileRef.current.value = "";
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Erreur");
+    } finally { setLoading(false); }
+  };
+
+  return (
+    <div className="max-w-3xl space-y-5">
+      {/* Header */}
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h2 className="font-display text-xl text-olive tracking-wider">MODÈLES DE SCRIPTS</h2>
+          <p className="text-olive-muted text-xs mt-1">
+            Ajoute des scripts de référence — l&apos;IA s&apos;en inspirera pour générer dans le même style.
+          </p>
+        </div>
+      </div>
+
+      {/* Add form */}
+      <div className="bg-white border-2 border-olive/10 rounded-2xl p-5 space-y-4">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-lime inline-block" />
+          <span className="text-[10px] font-display tracking-widest text-olive uppercase">Ajouter un modèle</span>
+        </div>
+
+        {/* Mode toggle */}
+        <div className="flex gap-1.5">
+          {(["text", "file"] as const).map((m) => (
+            <button
+              key={m}
+              onClick={() => setMode(m)}
+              className={`px-3 py-1.5 rounded-lg border-2 text-[10px] font-display tracking-widest transition-all ${
+                mode === m ? "bg-olive border-olive text-lime" : "bg-cream-input border-olive/15 text-olive-muted hover:border-olive/30"
+              }`}
+            >
+              {m === "text" ? "✏ COPIER-COLLER" : "📎 FICHIER .TXT"}
+            </button>
+          ))}
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Titre du modèle">
+            <Input value={title} onChange={setTitle} placeholder="Ex: Script UGC validé juin 2025" />
+          </Field>
+          <Field label="Type de script">
+            <select
+              value={scriptType}
+              onChange={(e) => setScriptType(e.target.value as ScriptType | "")}
+              className="w-full bg-cream-input border-2 border-olive/15 rounded-xl px-3.5 py-2.5 text-olive text-sm focus:border-olive transition-colors"
+            >
+              <option value="">— Automatique —</option>
+              {CONTENT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>{t.label}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+
+        {mode === "text" ? (
+          <>
+            <Field label="Contenu du script">
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                placeholder="Colle ici ton script de référence (UGC, micro-trottoir, face cam…)"
+                rows={8}
+                className="w-full bg-cream-input border-2 border-olive/15 rounded-xl px-3.5 py-2.5 text-olive placeholder-olive-light text-sm focus:border-olive transition-colors resize-none font-mono text-xs"
+              />
+            </Field>
+            {error && <p className="text-red-500 text-xs">{error}</p>}
+            <button
+              onClick={handleSubmitText}
+              disabled={loading || !content.trim()}
+              className="w-full bg-olive hover:bg-olive-dark disabled:opacity-40 text-white font-display tracking-widest text-sm rounded-xl py-3 transition-all"
+            >
+              {loading ? "AJOUT EN COURS…" : "✓ AJOUTER CE MODÈLE"}
+            </button>
+          </>
+        ) : (
+          <>
+            <div
+              className="border-2 border-dashed border-olive/20 rounded-xl p-8 text-center cursor-pointer hover:border-olive/40 transition-colors"
+              onClick={() => fileRef.current?.click()}
+            >
+              <div className="text-2xl mb-2 opacity-30">📎</div>
+              <p className="text-olive-muted text-sm">Clique pour choisir un fichier <strong>.txt</strong></p>
+              <p className="text-olive-light text-[10px] mt-1">Pour les PDF, utilise l&apos;onglet Copier-Coller</p>
+            </div>
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".txt,text/plain"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) handleSubmitFile(file);
+              }}
+            />
+            {error && <p className="text-red-500 text-xs">{error}</p>}
+          </>
+        )}
+      </div>
+
+      {/* List */}
+      {referenceScripts.length === 0 ? (
+        <EmptyState
+          icon="◎"
+          title="AUCUN MODÈLE"
+          description="Ajoute des scripts de référence pour que l'IA génère dans le même style"
+        />
+      ) : (
+        <div className="space-y-3">
+          {referenceScripts.map((s) => (
+            <div key={s.id} className="bg-white border-2 border-olive/10 rounded-xl overflow-hidden">
+              <div className="px-4 py-3 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 flex-1 min-w-0">
+                  <span className="text-sm opacity-40">{s.sourceType === "file" ? "📎" : "✏"}</span>
+                  <div className="min-w-0">
+                    <div className="font-display text-olive tracking-wider text-sm truncate">{s.title}</div>
+                    <div className="text-olive-light text-[9px] uppercase tracking-widest mt-0.5">
+                      {s.scriptType ? s.scriptType.replace("_", " ") : "Tous types"} · {new Date(s.createdAt).toLocaleDateString("fr-FR")} · {s.content.length} caractères
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setExpanded(expanded === s.id ? null : s.id)}
+                    className="text-[9px] font-display tracking-widest px-2.5 py-1.5 border-2 border-olive/15 text-olive-muted hover:border-olive/30 rounded-lg transition-all"
+                  >
+                    {expanded === s.id ? "RÉDUIRE" : "VOIR"}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      await fetch(`/api/companies/${companyId}/reference-scripts`, {
+                        method: "DELETE",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ id: s.id }),
+                      });
+                      onDelete(s.id);
+                    }}
+                    className="text-[9px] font-display tracking-widest px-2.5 py-1.5 border-2 border-red-200 text-red-400 hover:border-red-400 hover:text-red-600 rounded-lg transition-all"
+                  >
+                    ✕
+                  </button>
+                </div>
+              </div>
+              {expanded === s.id && (
+                <div className="border-t border-olive/8 px-4 py-3 bg-cream-card">
+                  <pre className="text-xs text-olive-muted whitespace-pre-wrap font-mono leading-relaxed max-h-64 overflow-y-auto">
+                    {s.content}
+                  </pre>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

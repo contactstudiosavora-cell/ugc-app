@@ -23,6 +23,8 @@ import type {
   PackageStatus,
   ScriptStatus,
   HistoryEntry,
+  ReferenceScriptDoc,
+  ReferenceScriptRow,
 } from "./types";
 
 /* ─── Connection caching (Next.js serverless pattern) ──────────── */
@@ -530,6 +532,60 @@ export async function deleteScript(id: string): Promise<boolean> {
 }
 
 /* ═══════════════════════════════════════════════════════════════════
+   REFERENCE SCRIPTS
+═══════════════════════════════════════════════════════════════════ */
+
+function docToReferenceScriptRow(doc: ReferenceScriptDoc): ReferenceScriptRow {
+  return {
+    id: doc._id,
+    companyId: doc.companyId,
+    title: doc.title,
+    content: doc.content,
+    scriptType: doc.scriptType,
+    sourceType: doc.sourceType,
+    createdAt: toISOSafe(doc.createdAt),
+  };
+}
+
+export async function listReferenceScripts(companyId: string): Promise<ReferenceScriptRow[]> {
+  const db = await getDb();
+  const docs = await db
+    .collection<ReferenceScriptDoc>("reference_scripts")
+    .find({ companyId })
+    .sort({ createdAt: -1 })
+    .toArray();
+  return docs.map(docToReferenceScriptRow);
+}
+
+export async function createReferenceScript(data: {
+  companyId: string;
+  title: string;
+  content: string;
+  scriptType?: ScriptType | null;
+  sourceType?: "manual" | "file";
+}): Promise<ReferenceScriptRow> {
+  const db = await getDb();
+  const now = new Date();
+  const doc: ReferenceScriptDoc = {
+    _id: randomUUID(),
+    companyId: data.companyId,
+    title: data.title,
+    content: data.content,
+    scriptType: data.scriptType ?? null,
+    sourceType: data.sourceType ?? "manual",
+    createdAt: now,
+  };
+  await db.collection<ReferenceScriptDoc>("reference_scripts").insertOne(doc);
+  return docToReferenceScriptRow(doc);
+}
+
+export async function deleteReferenceScript(id: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.collection<ReferenceScriptDoc>("reference_scripts").deleteOne({ _id: id });
+  return result.deletedCount > 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
    LEARNING CONTEXT (for generation intelligence)
 ═══════════════════════════════════════════════════════════════════ */
 
@@ -624,6 +680,7 @@ export async function buildLearningContext(
 ): Promise<string> {
   const fewShot = await getValidatedScriptsForCompany(companyId, 5);
   const globalPatterns = companyId ? await getGlobalValidatedScripts(companyId, 3) : [];
+  const referenceScripts = await listReferenceScripts(companyId);
 
   const angleLabels: Record<string, string> = {
     emotional: "ÉMOTIONNEL",
@@ -667,6 +724,22 @@ export async function buildLearningContext(
       `  → Ne copie pas mot pour mot — crée quelque chose de nouveau.\n` +
       `╚══════════════════════════════════════════════════════╝\n\n` +
       examples;
+  }
+
+  // Reference scripts provided by the client
+  if (referenceScripts.length > 0) {
+    const refs = referenceScripts
+      .slice(0, 3)
+      .map((r, i) => `[Modèle de référence ${i + 1}${r.title ? ` — "${r.title}"` : ""}]\n${r.content.slice(0, 800)}`)
+      .join("\n\n---\n\n");
+
+    context +=
+      `\n\n╔══════════════════════════════════════════════════════╗\n` +
+      `  MODÈLES DE SCRIPTS FOURNIS PAR LE CLIENT (${referenceScripts.length})\n` +
+      `  → Ces scripts définissent le FORMAT, le TON et le STYLE attendus.\n` +
+      `  → Adapte-toi à leur façon d'écrire, leur vocabulaire, leur rythme.\n` +
+      `╚══════════════════════════════════════════════════════╝\n\n` +
+      refs;
   }
 
   // Patterns to avoid from other companies

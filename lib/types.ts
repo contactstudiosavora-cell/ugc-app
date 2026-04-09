@@ -172,3 +172,25 @@ export interface GenerationDoc {
   validatedAt: Date | null;
   createdAt: Date;
 }
+
+/* ─── Reference Scripts ────────────────────────────────────────── */
+
+export interface ReferenceScriptDoc {
+  _id: string;
+  companyId: string;
+  title: string;
+  content: string;
+  scriptType: ScriptType | null;
+  sourceType: "manual" | "file";
+  createdAt: Date;
+}
+
+export interface ReferenceScriptRow {
+  id: string;
+  companyId: string;
+  title: string;
+  content: string;
+  scriptType: ScriptType | null;
+  sourceType: "manual" | "file";
+  createdAt: string;
+}

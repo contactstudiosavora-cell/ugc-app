@@ -6,6 +6,7 @@ import {
   listPackages,
   listScripts,
   listHistory,
+  listReferenceScripts,
 } from "@/lib/database";
 import type { ScriptType } from "@/lib/types";
 
@@ -22,8 +23,9 @@ export async function GET(
     const packages = await listPackages(id);
     const scripts = await listScripts({ companyId: id });
     const history = await listHistory({ companyId: id, limit: 50 });
+    const referenceScripts = await listReferenceScripts(id);
 
-    return NextResponse.json({ company, packages, scripts, history });
+    return NextResponse.json({ company, packages, scripts, history, referenceScripts });
   } catch (e: unknown) {
     return NextResponse.json({ error: String(e) }, { status: 500 });
   }

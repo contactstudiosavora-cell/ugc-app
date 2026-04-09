@@ -53,6 +53,10 @@ export async function POST() {
     await db.collection("scripts").createIndex({ generationId: 1 }, { background: true });
     results.push("✓ Index scripts (companyId, packageId, status+createdAt, generationId)");
 
+    // reference_scripts
+    await db.collection("reference_scripts").createIndex({ companyId: 1, createdAt: -1 }, { background: true });
+    results.push("✓ Index reference_scripts (companyId+createdAt)");
+
     /* ── 2. MIGRATE COMPANIES — add new profile fields ─────────── */
 
     const companiesMigrated = await db.collection("companies").updateMany(

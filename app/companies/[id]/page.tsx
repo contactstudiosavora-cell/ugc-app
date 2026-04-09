@@ -430,12 +430,12 @@ export default function CompanyDetailPage({
                     </div>
 
                     <p className="flex-1 text-xs text-olive-muted line-clamp-2 leading-relaxed">
-                      {s.content.replace(/#+\s/g, "").replace(/\*/g, "").slice(0, 150)}…
+                      {(s.content ?? "").replace(/#+\s/g, "").replace(/\*/g, "").slice(0, 150) || "—"}
                     </p>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className={`text-[9px] font-display tracking-widest px-2 py-1 rounded-lg border ${SCRIPT_STATUS_CONFIG[s.status].color}`}>
-                        {SCRIPT_STATUS_CONFIG[s.status].label}
+                      <span className={`text-[9px] font-display tracking-widest px-2 py-1 rounded-lg border ${(SCRIPT_STATUS_CONFIG[s.status] ?? SCRIPT_STATUS_CONFIG.generated).color}`}>
+                        {(SCRIPT_STATUS_CONFIG[s.status] ?? SCRIPT_STATUS_CONFIG.generated).label}
                       </span>
                       <select
                         value={s.status}

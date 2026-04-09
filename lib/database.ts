@@ -421,11 +421,9 @@ export async function listScripts(filters?: {
   if (filters?.companyId) filter.companyId = filters.companyId;
   if (filters?.packageId) filter.packageId = filters.packageId;
   if (filters?.status) {
-    if (Array.isArray(filters.status)) {
-      filter.status = { $in: filters.status };
-    } else {
-      filter.status = filters.status;
-    }
+    filter.status = Array.isArray(filters.status)
+      ? { $in: filters.status }
+      : filters.status;
   }
 
   const docs = await db
@@ -434,15 +432,27 @@ export async function listScripts(filters?: {
     .sort({ createdAt: -1 })
     .toArray();
 
-  const rows: ScriptRow[] = [];
-  for (const doc of docs) {
-    const company = await db.collection<CompanyDoc>("companies").findOne({ _id: doc.companyId });
-    const pkg = doc.packageId
-      ? await db.collection<PackageDoc>("packages").findOne({ _id: doc.packageId })
-      : null;
-    rows.push(docToScriptRow(doc, company?.name, pkg?.name));
-  }
-  return rows;
+  if (docs.length === 0) return [];
+
+  // Batch-fetch companies and packages (avoid N+1 queries)
+  const companyIds = [...new Set(docs.map((d) => d.companyId).filter(Boolean))];
+  const packageIds = [...new Set(docs.map((d) => d.packageId).filter(Boolean) as string[])];
+
+  const [companies, packages] = await Promise.all([
+    companyIds.length
+      ? db.collection<CompanyDoc>("companies").find({ _id: { $in: companyIds } }).toArray()
+      : Promise.resolve([]),
+    packageIds.length
+      ? db.collection<PackageDoc>("packages").find({ _id: { $in: packageIds } }).toArray()
+      : Promise.resolve([]),
+  ]);
+
+  const companyMap = Object.fromEntries(companies.map((c) => [c._id, c.name]));
+  const packageMap = Object.fromEntries(packages.map((p) => [p._id, p.name]));
+
+  return docs.map((doc) =>
+    docToScriptRow(doc, companyMap[doc.companyId] ?? null, doc.packageId ? packageMap[doc.packageId] ?? null : null)
+  );
 }
 
 /** Get a single script by ID. */
@@ -785,17 +795,31 @@ export async function listHistory(options?: {
     .limit(options?.limit ?? 200)
     .toArray();
 
-  const entries: HistoryEntry[] = [];
-  for (const doc of docs) {
-    const company = doc.companyId
-      ? await db.collection<CompanyDoc>("companies").findOne({ _id: doc.companyId })
-      : null;
-    const pkg = doc.packageId
-      ? await db.collection<PackageDoc>("packages").findOne({ _id: doc.packageId })
-      : null;
-    entries.push(docToHistoryEntry(doc, company?.name, pkg?.name));
-  }
-  return entries;
+  if (docs.length === 0) return [];
+
+  // Batch-fetch companies and packages (avoid N+1 queries)
+  const companyIds = [...new Set(docs.map((d) => d.companyId).filter(Boolean) as string[])];
+  const packageIds = [...new Set(docs.map((d) => d.packageId).filter(Boolean) as string[])];
+
+  const [companies, packages] = await Promise.all([
+    companyIds.length
+      ? db.collection<CompanyDoc>("companies").find({ _id: { $in: companyIds } }).toArray()
+      : Promise.resolve([]),
+    packageIds.length
+      ? db.collection<PackageDoc>("packages").find({ _id: { $in: packageIds } }).toArray()
+      : Promise.resolve([]),
+  ]);
+
+  const companyMap = Object.fromEntries(companies.map((c) => [c._id, c.name]));
+  const packageMap = Object.fromEntries(packages.map((p) => [p._id, p.name]));
+
+  return docs.map((doc) =>
+    docToHistoryEntry(
+      doc,
+      doc.companyId ? companyMap[doc.companyId] ?? null : null,
+      doc.packageId ? packageMap[doc.packageId] ?? null : null
+    )
+  );
 }
 
 export async function deleteGeneration(id: string): Promise<boolean> {

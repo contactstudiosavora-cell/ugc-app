@@ -195,6 +195,40 @@ export interface ReferenceScriptRow {
   createdAt: string;
 }
 
+/* ─── Script Share Tokens ──────────────────────────────────────── */
+
+export interface ShareTokenDoc {
+  _id: string;          // the share token (UUID)
+  scriptId: string;
+  companyId: string;
+  companyName: string | null;
+  createdAt: Date;
+  expiresAt: Date | null;
+  clientName: string | null;
+  /** Client edits submitted */
+  clientContent: string | null;
+  /** Client comments */
+  clientComment: string | null;
+  /** "pending" | "approved" | "changes_requested" */
+  clientStatus: "pending" | "approved" | "changes_requested";
+  clientRespondedAt: Date | null;
+}
+
+export interface ShareTokenRow {
+  token: string;
+  scriptId: string;
+  companyId: string;
+  companyName: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+  clientName: string | null;
+  clientContent: string | null;
+  clientComment: string | null;
+  clientStatus: "pending" | "approved" | "changes_requested";
+  clientRespondedAt: string | null;
+  shareUrl: string;
+}
+
 export interface GlobalReferenceScriptDoc {
   _id: string;
   title: string;

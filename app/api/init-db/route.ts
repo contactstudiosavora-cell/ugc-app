@@ -61,6 +61,11 @@ export async function POST() {
     await db.collection("global_reference_scripts").createIndex({ createdAt: -1 }, { background: true });
     results.push("✓ Index global_reference_scripts (createdAt)");
 
+    // share_tokens
+    await db.collection("share_tokens").createIndex({ scriptId: 1, createdAt: -1 }, { background: true });
+    await db.collection("share_tokens").createIndex({ createdAt: -1 }, { background: true });
+    results.push("✓ Index share_tokens (scriptId+createdAt)");
+
     /* ── 2. MIGRATE COMPANIES — add new profile fields ─────────── */
 
     const companiesMigrated = await db.collection("companies").updateMany(
@@ -167,6 +172,7 @@ export async function POST() {
     const scriptsCount = await db.collection("scripts").countDocuments();
     const packagesCount = await db.collection("packages").countDocuments();
     const globalRefScriptsCount = await db.collection("global_reference_scripts").countDocuments();
+    const shareTokensCount = await db.collection("share_tokens").countDocuments();
 
     return NextResponse.json({
       success: true,
@@ -177,6 +183,7 @@ export async function POST() {
         scripts: scriptsCount,
         packages: packagesCount,
         global_reference_scripts: globalRefScriptsCount,
+        share_tokens: shareTokensCount,
       },
     });
   } catch (e: unknown) {

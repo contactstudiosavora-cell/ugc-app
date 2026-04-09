@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
-import type { CompanyRow, PackageRow, ScriptRow, HistoryEntry, ScriptType, PackageStatus, ReferenceScriptRow } from "@/lib/types";
+import type { CompanyRow, PackageRow, ScriptRow, HistoryEntry, ScriptType, PackageStatus, ReferenceScriptRow, ShareTokenRow } from "@/lib/types";
 
 const CONTENT_TYPES: { value: ScriptType; label: string; icon: string }[] = [
   { value: "ugc", label: "UGC", icon: "📱" },
@@ -56,6 +56,13 @@ export default function CompanyDetailPage({
   const [editAiInstruction, setEditAiInstruction] = useState("");
   const [editAiLoading, setEditAiLoading] = useState(false);
   const [assigningPackages, setAssigningPackages] = useState<Record<string, string>>({});
+
+  // Share modal
+  const [shareScript, setShareScript] = useState<ScriptRow | null>(null);
+  const [shareTokens, setShareTokens] = useState<ShareTokenRow[]>([]);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareCreating, setShareCreating] = useState(false);
+  const [shareCopied, setShareCopied] = useState<string | null>(null);
 
   // AI autofill
   const [autofilling, setAutofilling] = useState(false);
@@ -123,6 +130,44 @@ export default function CompanyDetailPage({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleOpenShare = async (s: ScriptRow) => {
+    setShareScript(s);
+    setShareLoading(true);
+    setShareTokens([]);
+    try {
+      const res = await fetch(`/api/scripts/${s.id}/share`);
+      const d = await res.json();
+      setShareTokens(d.tokens ?? []);
+    } catch { /* silent */ }
+    finally { setShareLoading(false); }
+  };
+
+  const handleCreateShare = async () => {
+    if (!shareScript) return;
+    setShareCreating(true);
+    try {
+      const res = await fetch(`/api/scripts/${shareScript.id}/share`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      const d = await res.json();
+      setShareTokens((prev) => [d.token, ...prev]);
+    } catch { /* silent */ }
+    finally { setShareCreating(false); }
+  };
+
+  const handleRevokeShare = async (token: string) => {
+    await fetch(`/api/scripts/${shareScript?.id}/share`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token }),
+    });
+    setShareTokens((prev) => prev.filter((t) => t.token !== token));
+  };
+
+  const handleCopyLink = (url: string) => {
+    navigator.clipboard.writeText(url);
+    setShareCopied(url);
+    setTimeout(() => setShareCopied(null), 2000);
   };
 
   const handleAutofill = async () => {
@@ -642,6 +687,13 @@ export default function CompanyDetailPage({
                           >
                             ✏ ÉDITER
                           </button>
+                          <button
+                            onClick={() => handleOpenShare(s)}
+                            className="text-[9px] font-display tracking-widest border border-olive/15 hover:border-lime/40 text-olive-muted hover:text-olive rounded-lg px-2.5 py-1.5 transition-all"
+                            title="Partager avec le client"
+                          >
+                            🔗 PARTAGER
+                          </button>
                         </div>
                       </div>
 
@@ -838,6 +890,20 @@ export default function CompanyDetailPage({
           onAiEdit={handleAiEdit}
           aiLoading={editAiLoading}
           onClose={() => setEditingScript(null)}
+        />
+      )}
+
+      {shareScript && (
+        <ShareModal
+          script={shareScript}
+          tokens={shareTokens}
+          loading={shareLoading}
+          creating={shareCreating}
+          copied={shareCopied}
+          onCreate={handleCreateShare}
+          onRevoke={handleRevokeShare}
+          onCopy={handleCopyLink}
+          onClose={() => setShareScript(null)}
         />
       )}
 
@@ -1320,6 +1386,150 @@ function ScriptEditModal({
           >
             {saving ? <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : null}
             {saving ? "SAUVEGARDE…" : "💾 SAUVEGARDER"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─── Share Modal ─────────────────────────────────────────────── */
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  pending: { label: "En attente", color: "text-orange-500" },
+  approved: { label: "✓ Approuvé", color: "text-lime-dark" },
+  changes_requested: { label: "✏ Modifications demandées", color: "text-olive-muted" },
+};
+
+function ShareModal({
+  script,
+  tokens,
+  loading,
+  creating,
+  copied,
+  onCreate,
+  onRevoke,
+  onCopy,
+  onClose,
+}: {
+  script: ScriptRow;
+  tokens: ShareTokenRow[];
+  loading: boolean;
+  creating: boolean;
+  copied: string | null;
+  onCreate: () => void;
+  onRevoke: (token: string) => void;
+  onCopy: (url: string) => void;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-olive/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+      <div className="bg-cream-card border-2 border-olive/15 rounded-2xl w-full max-w-lg flex flex-col max-h-[85vh]">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-olive/10 flex items-center justify-between shrink-0">
+          <div>
+            <h2 className="font-display text-lg text-olive tracking-wider">PARTAGER AVEC LE CLIENT</h2>
+            <p className="text-olive-muted text-[10px] uppercase tracking-widest mt-0.5">
+              {ANGLE_LABELS[script.angle]?.emoji} {ANGLE_LABELS[script.angle]?.label}
+            </p>
+          </div>
+          <button onClick={onClose} className="text-olive-muted hover:text-olive text-xl transition-colors">✕</button>
+        </div>
+
+        <div className="px-6 py-5 flex-1 overflow-y-auto space-y-5">
+          {/* Info banner */}
+          <div className="bg-lime/10 border border-lime/25 rounded-xl px-4 py-3 text-sm text-olive-muted leading-relaxed">
+            Génère un lien unique à envoyer au client. Il pourra <strong className="text-olive">modifier le script</strong>, 
+            laisser un <strong className="text-olive">commentaire</strong> et <strong className="text-olive">approuver ou demander des changements</strong>.
+            Aucune mention de l&apos;IA.
+          </div>
+
+          {/* Create new link */}
+          <button
+            onClick={onCreate}
+            disabled={creating}
+            className="w-full bg-olive hover:bg-olive-dark disabled:opacity-40 text-white font-display tracking-widest rounded-xl py-3 text-sm transition-all flex items-center justify-center gap-2"
+          >
+            {creating ? <span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "🔗"}
+            {creating ? "GÉNÉRATION DU LIEN…" : "GÉNÉRER UN NOUVEAU LIEN"}
+          </button>
+
+          {/* Token list */}
+          <div>
+            <div className="text-[10px] font-display tracking-widest text-olive-muted uppercase mb-2">
+              Liens existants ({tokens.length})
+            </div>
+
+            {loading ? (
+              <div className="text-center py-6 text-olive-muted text-sm">Chargement…</div>
+            ) : tokens.length === 0 ? (
+              <div className="text-center py-6 text-olive-light text-sm">Aucun lien créé</div>
+            ) : (
+              <div className="space-y-2">
+                {tokens.map((t) => {
+                  const status = STATUS_LABELS[t.clientStatus] ?? STATUS_LABELS.pending;
+                  return (
+                    <div key={t.token} className="bg-white border-2 border-olive/8 rounded-xl p-4 space-y-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-[10px] font-display tracking-widest ${status.color}`}>
+                            {status.label}
+                          </div>
+                          <div className="text-[10px] text-olive-light mt-0.5">
+                            Créé le {new Date(t.createdAt).toLocaleDateString("fr-FR")}
+                            {t.clientName && ` · ${t.clientName}`}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button
+                            onClick={() => onCopy(t.shareUrl)}
+                            className={`text-[9px] font-display tracking-widest px-2.5 py-1.5 rounded-lg border transition-all ${
+                              copied === t.shareUrl
+                                ? "bg-lime/20 border-lime/40 text-olive"
+                                : "border-olive/15 hover:border-olive/30 text-olive-muted hover:text-olive"
+                            }`}
+                          >
+                            {copied === t.shareUrl ? "✓ COPIÉ" : "📋 COPIER"}
+                          </button>
+                          <button
+                            onClick={() => onRevoke(t.token)}
+                            className="text-[9px] font-display tracking-widest border border-red-200 hover:border-red-300 text-red-400 hover:text-red-600 rounded-lg px-2.5 py-1.5 transition-all"
+                          >
+                            RÉVOQUER
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Client feedback */}
+                      {t.clientStatus !== "pending" && (
+                        <div className="border-t border-olive/6 pt-2 space-y-1">
+                          {t.clientComment && (
+                            <p className="text-xs text-olive-muted italic">
+                              &ldquo;{t.clientComment}&rdquo;
+                            </p>
+                          )}
+                          {t.clientContent && (
+                            <div className="bg-lime/8 border border-lime/20 rounded-lg px-3 py-2">
+                              <div className="text-[9px] text-olive-muted uppercase tracking-widest mb-1">Script modifié par le client</div>
+                              <p className="text-[10px] text-olive line-clamp-3">{t.clientContent.slice(0, 200)}…</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="px-6 pb-5 shrink-0 border-t border-olive/10 pt-4">
+          <button
+            onClick={onClose}
+            className="w-full bg-cream-input border-2 border-olive/15 text-olive-muted hover:text-olive rounded-xl py-2.5 text-[10px] font-display tracking-widest transition-all"
+          >
+            FERMER
           </button>
         </div>
       </div>

@@ -10,7 +10,16 @@
       "Bash(dir /b \"C:\\\\Users\\\\noahr\\\\ugc-plateforme\\\\app\")",
       "Bash(dir /b \"C:\\\\Users\\\\noahr\\\\ugc-plateforme\\\\lib\")",
       "Bash(dir /b \"C:\\\\Users\\\\noahr\\\\ugc-plateforme\\\\components\")",
-      "Bash(dir /b \"C:\\\\Users\\\\noahr\\\\ugc-plateforme\\\\app\\\\api\")"
+      "Bash(dir /b \"C:\\\\Users\\\\noahr\\\\ugc-plateforme\\\\app\\\\api\")",
+      "Bash(npm run:*)",
+      "Bash(curl -s -X POST \"https://ugc-app-akow.vercel.app/api/init-db\" -H \"Content-Type: application/json\")",
+      "Bash(curl -s \"https://ugc-app-akow.vercel.app/api/companies\")",
+      "Bash(curl -s \"https://ugc-app-akow.vercel.app/api/companies/b4430bc4-4309-4e0f-98fd-03109b96872b\")",
+      "Bash(curl -s -X POST \"https://ugc-app-akow.vercel.app/api/init-db\")",
+      "Bash(python -m json.tool)",
+      "Bash(curl -s -X POST https://ugc-app-akow.vercel.app/api/init-db)",
+      "Bash(curl -s \"https://ugc-app-akow.vercel.app/api/debug\")",
+      "Bash(npx tsc:*)"
     ]
   }
 }

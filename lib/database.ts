@@ -27,6 +27,8 @@ import type {
   ReferenceScriptRow,
   GlobalReferenceScriptDoc,
   GlobalReferenceScriptRow,
+  ShareTokenDoc,
+  ShareTokenRow,
 } from "./types";
 
 /* ─── Connection caching (Next.js serverless pattern) ──────────── */
@@ -989,5 +991,108 @@ export async function deleteGeneration(id: string): Promise<boolean> {
   const result = await db
     .collection<GenerationDoc>("generations")
     .deleteOne({ _id: id });
+  return result.deletedCount > 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SHARE TOKENS — client review links
+═══════════════════════════════════════════════════════════════════ */
+
+const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "https://ugc-app-akow.vercel.app";
+
+function docToShareTokenRow(doc: ShareTokenDoc): ShareTokenRow {
+  return {
+    token: doc._id,
+    scriptId: doc.scriptId,
+    companyId: doc.companyId,
+    companyName: doc.companyName,
+    createdAt: toISOSafe(doc.createdAt),
+    expiresAt: doc.expiresAt ? toISOSafe(doc.expiresAt) : null,
+    clientName: doc.clientName,
+    clientContent: doc.clientContent,
+    clientComment: doc.clientComment,
+    clientStatus: doc.clientStatus,
+    clientRespondedAt: doc.clientRespondedAt ? toISOSafe(doc.clientRespondedAt) : null,
+    shareUrl: `${APP_URL}/share/${doc._id}`,
+  };
+}
+
+export async function createShareToken(data: {
+  scriptId: string;
+  companyId: string;
+  companyName: string | null;
+  clientName?: string | null;
+  expiresInDays?: number;
+}): Promise<ShareTokenRow> {
+  const db = await getDb();
+  const token = randomUUID();
+  const now = new Date();
+  const expiresAt = data.expiresInDays
+    ? new Date(now.getTime() + data.expiresInDays * 86400000)
+    : null;
+
+  const doc: ShareTokenDoc = {
+    _id: token,
+    scriptId: data.scriptId,
+    companyId: data.companyId,
+    companyName: data.companyName ?? null,
+    createdAt: now,
+    expiresAt,
+    clientName: data.clientName ?? null,
+    clientContent: null,
+    clientComment: null,
+    clientStatus: "pending",
+    clientRespondedAt: null,
+  };
+
+  await db.collection<ShareTokenDoc>("share_tokens").insertOne(doc);
+  return docToShareTokenRow(doc);
+}
+
+export async function getShareToken(token: string): Promise<ShareTokenRow | null> {
+  const db = await getDb();
+  const doc = await db.collection<ShareTokenDoc>("share_tokens").findOne({ _id: token });
+  if (!doc) return null;
+  return docToShareTokenRow(doc);
+}
+
+export async function listShareTokensForScript(scriptId: string): Promise<ShareTokenRow[]> {
+  const db = await getDb();
+  const docs = await db
+    .collection<ShareTokenDoc>("share_tokens")
+    .find({ scriptId })
+    .sort({ createdAt: -1 })
+    .toArray();
+  return docs.map(docToShareTokenRow);
+}
+
+export async function updateShareTokenClientResponse(
+  token: string,
+  data: {
+    clientName?: string;
+    clientContent?: string | null;
+    clientComment?: string | null;
+    clientStatus: "pending" | "approved" | "changes_requested";
+  }
+): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.collection<ShareTokenDoc>("share_tokens").updateOne(
+    { _id: token },
+    {
+      $set: {
+        ...(data.clientName !== undefined ? { clientName: data.clientName } : {}),
+        ...(data.clientContent !== undefined ? { clientContent: data.clientContent } : {}),
+        ...(data.clientComment !== undefined ? { clientComment: data.clientComment } : {}),
+        clientStatus: data.clientStatus,
+        clientRespondedAt: new Date(),
+      },
+    }
+  );
+  return result.matchedCount > 0;
+}
+
+export async function deleteShareToken(token: string): Promise<boolean> {
+  const db = await getDb();
+  const result = await db.collection<ShareTokenDoc>("share_tokens").deleteOne({ _id: token });
   return result.deletedCount > 0;
 }

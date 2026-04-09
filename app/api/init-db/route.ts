@@ -134,7 +134,25 @@ export async function POST() {
 
     results.push(`✓ Scripts rétro-créés depuis générations validées : ${scriptsCreated}`);
 
-    /* ── 5. SUMMARY ─────────────────────────────────────────────── */
+    /* ── 5. REPAIR — fix null/missing content in scripts ────────── */
+
+    const nullContentFixed = await db.collection("scripts").updateMany(
+      { $or: [{ content: null }, { content: { $exists: false } }] },
+      { $set: { content: "" } }
+    );
+    if (nullContentFixed.modifiedCount > 0) {
+      results.push(`✓ Scripts réparés (content null → "") : ${nullContentFixed.modifiedCount}`);
+    }
+
+    const nullStatusFixed = await db.collection("scripts").updateMany(
+      { $or: [{ status: null }, { status: { $exists: false } }] },
+      { $set: { status: "generated" } }
+    );
+    if (nullStatusFixed.modifiedCount > 0) {
+      results.push(`✓ Scripts réparés (status null → generated) : ${nullStatusFixed.modifiedCount}`);
+    }
+
+    /* ── 6. SUMMARY ─────────────────────────────────────────────── */
 
     const companiesCount = await db.collection("companies").countDocuments();
     const generationsCount = await db.collection("generations").countDocuments();

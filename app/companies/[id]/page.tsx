@@ -30,7 +30,7 @@ const ANGLE_LABELS = {
   curiosity: { label: "CURIOSITÉ", emoji: "🔥" },
 };
 
-type Tab = "profil" | "packages" | "scripts" | "modeles";
+type Tab = "profil" | "packages" | "scripts" | "scripts_valides" | "modeles";
 
 /* ─── Page ──────────────────────────────────────────────────── */
 
@@ -268,7 +268,7 @@ export default function CompanyDetailPage({
 
       {/* Tabs */}
       <div className="bg-cream-card border-b border-olive/10 px-8 flex gap-1 shrink-0">
-        {(["profil", "packages", "scripts", "modeles"] as Tab[]).map((t) => (
+        {(["profil", "packages", "scripts", "scripts_valides", "modeles"] as Tab[]).map((t) => (
           <button
             key={t}
             onClick={() => setTab(t)}
@@ -281,6 +281,7 @@ export default function CompanyDetailPage({
             {t === "profil" && "◈ PROFIL"}
             {t === "packages" && `▦ PACKAGES (${packages.length})`}
             {t === "scripts" && `✓ SCRIPTS (${scripts.length})`}
+            {t === "scripts_valides" && `⭐ VALIDÉS (${scripts.filter((s) => ["validated", "in_production", "filmed"].includes(s.status)).length})`}
             {t === "modeles" && `◎ MODÈLES (${referenceScripts.length})`}
           </button>
         ))}
@@ -540,46 +541,171 @@ export default function CompanyDetailPage({
                         </div>
                       </div>
 
-                      {/* Package assignment section - shown for validated scripts */}
+                      {/* Package assignment section - Enhanced visibility */}
                       {isValidated && packages.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-olive/8 flex items-center gap-2">
-                          <span className="text-[9px] text-olive-muted font-display tracking-widest">
-                            {s.packageId ? "CHANGER DE PACKAGE:" : "AJOUTER À UN PACKAGE:"}
-                          </span>
-                          <select
-                            value={selectedPackageId}
-                            onChange={(e) => setAssigningPackages((prev) => ({ ...prev, [s.id]: e.target.value }))}
-                            className="text-[10px] bg-cream-input border border-olive/15 rounded-lg px-2 py-1 text-olive-muted focus:outline-none focus:border-olive flex-1 max-w-xs"
-                          >
-                            <option value="">— Sélectionner un package —</option>
-                            {packages.map((pkg) => (
-                              <option key={pkg.id} value={pkg.id}>
-                                {pkg.name} ({pkg.scriptType.toUpperCase()})
-                              </option>
-                            ))}
-                          </select>
-                          {selectedPackageId && selectedPackageId !== s.packageId && (
-                            <button
-                              onClick={() => handleAssignPackage(s.id, selectedPackageId)}
-                              className="text-[9px] font-display tracking-widest bg-lime/15 hover:bg-lime/25 border-2 border-lime/30 text-olive rounded-lg px-3 py-1.5 transition-all"
-                            >
-                              ✓ ASSIGNER
-                            </button>
-                          )}
-                          {s.packageId && (
-                            <button
-                              onClick={() => handleAssignPackage(s.id, "")}
-                              className="text-[9px] font-display tracking-widest border border-olive/15 hover:border-red-300 text-olive-muted hover:text-red-500 rounded-lg px-2.5 py-1.5 transition-all"
-                              title="Retirer du package"
-                            >
-                              ✕
-                            </button>
-                          )}
+                        <div className="mt-3 pt-3 border-t border-lime/10 bg-gradient-to-r from-lime/5 to-transparent rounded-lg p-3">
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg shrink-0">📦</span>
+                            <div className="flex-1 flex items-center gap-2">
+                              <span className="text-[9px] text-olive-muted font-display tracking-widest shrink-0">
+                                {s.packageId ? "PACKAGE:" : "AJOUTER AU PACKAGE:"}
+                              </span>
+                              <select
+                                value={selectedPackageId}
+                                onChange={(e) => setAssigningPackages((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                                className="flex-1 text-[10px] bg-white border-2 border-lime/30 focus:border-lime/50 rounded-lg px-3 py-2 text-olive focus:outline-none transition-colors"
+                              >
+                                <option value="">— Sélectionner un package —</option>
+                                {packages.map((pkg) => (
+                                  <option key={pkg.id} value={pkg.id}>
+                                    {pkg.name} ({pkg.scriptType.toUpperCase()})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            {selectedPackageId && selectedPackageId !== s.packageId && (
+                              <button
+                                onClick={() => handleAssignPackage(s.id, selectedPackageId)}
+                                className="text-[10px] font-display tracking-widest bg-lime hover:bg-lime-dark text-olive rounded-lg px-4 py-2 transition-all shadow-md hover:shadow-lg"
+                              >
+                                ✓ ASSIGNER
+                              </button>
+                            )}
+                            {s.packageId && (
+                              <button
+                                onClick={() => handleAssignPackage(s.id, "")}
+                                className="text-[9px] font-display tracking-widest border border-olive/15 hover:border-red-300 text-olive-muted hover:text-red-500 rounded-lg px-2.5 py-1.5 transition-all"
+                                title="Retirer du package"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
                   );
                 })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── SCRIPTS VALIDÉS TAB ──────────────────────────────────── */}
+        {tab === "scripts_valides" && (
+          <div className="max-w-4xl">
+            <div className="flex items-center justify-between mb-5">
+              <h2 className="font-display text-xl text-olive tracking-wider">
+                SCRIPTS VALIDÉS ({scripts.filter((s) => ["validated", "in_production", "filmed"].includes(s.status)).length})
+              </h2>
+              <Link
+                href={`/?companyId=${id}`}
+                className="flex items-center gap-2 bg-lime/15 hover:bg-lime/25 border-2 border-lime/30 text-olive font-display tracking-widest text-sm rounded-xl px-4 py-2.5 transition-all"
+              >
+                ✦ GÉNÉRER POUR CE CLIENT
+              </Link>
+            </div>
+
+            {scripts.filter((s) => ["validated", "in_production", "filmed"].includes(s.status)).length === 0 ? (
+              <EmptyState
+                icon="⭐"
+                title="AUCUN SCRIPT VALIDÉ"
+                description="Validez des scripts pour les voir apparaître ici"
+              />
+            ) : (
+              <div className="space-y-2">
+                {scripts
+                  .filter((s) => ["validated", "in_production", "filmed"].includes(s.status))
+                  .map((s) => {
+                    const selectedPackageId = assigningPackages[s.id] ?? s.packageId ?? "";
+                    
+                    return (
+                      <div key={s.id} className="bg-white border-2 border-lime/20 rounded-xl p-4 shadow-sm">
+                        <div className="flex items-start gap-4">
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-base">{ANGLE_LABELS[s.angle]?.emoji}</span>
+                            <div>
+                              <div className="text-[9px] font-display tracking-widest text-olive-muted">
+                                {ANGLE_LABELS[s.angle]?.label}
+                              </div>
+                              {s.packageName && (
+                                <div className="text-[9px] text-lime-dark font-semibold">📦 {s.packageName}</div>
+                              )}
+                            </div>
+                          </div>
+
+                          <p className="flex-1 text-xs text-olive-muted line-clamp-2 leading-relaxed">
+                            {(s.content ?? "").replace(/#+\s/g, "").replace(/\*/g, "").slice(0, 150) || "—"}
+                          </p>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`text-[9px] font-display tracking-widest px-2 py-1 rounded-lg border ${(SCRIPT_STATUS_CONFIG[s.status] ?? SCRIPT_STATUS_CONFIG.generated).color}`}>
+                              {(SCRIPT_STATUS_CONFIG[s.status] ?? SCRIPT_STATUS_CONFIG.generated).label}
+                            </span>
+                            <select
+                              value={s.status}
+                              onChange={(e) => handleScriptStatus(s.id, e.target.value)}
+                              className="text-[10px] bg-cream-input border border-olive/15 rounded-lg px-2 py-1 text-olive-muted focus:outline-none focus:border-olive"
+                            >
+                              <option value="generated">Généré</option>
+                              <option value="validated">Validé</option>
+                              <option value="in_production">En production</option>
+                              <option value="filmed">Filmé</option>
+                            </select>
+                            <button
+                              onClick={() => handleOpenEdit(s)}
+                              className="text-[9px] font-display tracking-widest border border-olive/15 hover:border-olive/30 text-olive-muted hover:text-olive rounded-lg px-2.5 py-1.5 transition-all"
+                            >
+                              ✏ ÉDITER
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Package assignment section - Enhanced */}
+                        {packages.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-lime/10 bg-gradient-to-r from-lime/5 to-transparent rounded-lg p-3">
+                            <div className="flex items-center gap-3">
+                              <span className="text-lg shrink-0">📦</span>
+                              <div className="flex-1 flex items-center gap-2">
+                                <span className="text-[9px] text-olive-muted font-display tracking-widest shrink-0">
+                                  {s.packageId ? "PACKAGE:" : "AJOUTER AU PACKAGE:"}
+                                </span>
+                                <select
+                                  value={selectedPackageId}
+                                  onChange={(e) => setAssigningPackages((prev) => ({ ...prev, [s.id]: e.target.value }))}
+                                  className="flex-1 text-[10px] bg-white border-2 border-lime/30 focus:border-lime/50 rounded-lg px-3 py-2 text-olive focus:outline-none transition-colors"
+                                >
+                                  <option value="">— Sélectionner un package —</option>
+                                  {packages.map((pkg) => (
+                                    <option key={pkg.id} value={pkg.id}>
+                                      {pkg.name} ({pkg.scriptType.toUpperCase()})
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              {selectedPackageId && selectedPackageId !== s.packageId && (
+                                <button
+                                  onClick={() => handleAssignPackage(s.id, selectedPackageId)}
+                                  className="text-[10px] font-display tracking-widest bg-lime hover:bg-lime-dark text-olive rounded-lg px-4 py-2 transition-all shadow-md hover:shadow-lg"
+                                >
+                                  ✓ ASSIGNER
+                                </button>
+                              )}
+                              {s.packageId && (
+                                <button
+                                  onClick={() => handleAssignPackage(s.id, "")}
+                                  className="text-[9px] font-display tracking-widest border border-olive/15 hover:border-red-300 text-olive-muted hover:text-red-500 rounded-lg px-2.5 py-1.5 transition-all"
+                                  title="Retirer du package"
+                                >
+                                  ✕
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
               </div>
             )}
           </div>

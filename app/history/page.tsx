@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { HistoryEntry, ScriptAngle } from "@/lib/types";
+import type { HistoryEntry, ScriptAngle, PackageRow } from "@/lib/types";
 import ScriptRenderer from "@/components/ScriptRenderer";
 
 const ANGLE_LABELS: Record<ScriptAngle, { label: string; emoji: string }> = {
@@ -21,6 +21,7 @@ type Filter = "all" | "validated";
 
 export default function HistoryPage() {
   const [entries, setEntries] = useState<HistoryEntry[]>([]);
+  const [packages, setPackages] = useState<PackageRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -28,12 +29,22 @@ export default function HistoryPage() {
   const [copied, setCopied] = useState(false);
   const [validating, setValidating] = useState(false);
   const [validateFeedback, setValidateFeedback] = useState<string | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<string>("");
+  const [assigning, setAssigning] = useState(false);
 
   useEffect(() => {
-    fetch("/api/history")
-      .then((r) => r.json())
-      .then((d) => setEntries(d.history ?? []))
-      .catch(() => setEntries([]))
+    Promise.all([
+      fetch("/api/history").then((r) => r.json()),
+      fetch("/api/packages").then((r) => r.json())
+    ])
+      .then(([historyData, packagesData]) => {
+        setEntries(historyData.history ?? []);
+        setPackages(packagesData.packages ?? []);
+      })
+      .catch(() => {
+        setEntries([]);
+        setPackages([]);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -52,9 +63,9 @@ export default function HistoryPage() {
     setActiveAngle("emotional");
     setCopied(false);
     setValidateFeedback(null);
+    setSelectedPackage("");
   };
 
-  /** Validate an angle. If it's already the validated one → unvalidate. */
   const handleValidate = async (entryId: string, angle: ScriptAngle) => {
     const entry = entries.find((e) => e.id === entryId);
     if (!entry) return;
@@ -87,6 +98,43 @@ export default function HistoryPage() {
       /* silent */
     } finally {
       setValidating(false);
+    }
+  };
+
+  const handleAssignPackage = async () => {
+    if (!selectedPackage || !expanded) return;
+    setAssigning(true);
+    
+    try {
+      const entry = entries.find((e) => e.id === expanded);
+      if (!entry || !entry.validated) return;
+
+      // Find the script ID from the validated angle
+      const res = await fetch(`/api/scripts/${expanded}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ packageId: selectedPackage }),
+      });
+
+      if (!res.ok) throw new Error();
+
+      const pkg = packages.find((p) => p.id === selectedPackage);
+      setEntries((prev) =>
+        prev.map((e) =>
+          e.id === expanded
+            ? { ...e, packageId: selectedPackage, packageName: pkg?.name ?? null }
+            : e
+        )
+      );
+
+      setValidateFeedback(`✓ Script ajouté au package "${pkg?.name}"`);
+      setTimeout(() => setValidateFeedback(null), 2500);
+      setSelectedPackage("");
+    } catch {
+      setValidateFeedback("❌ Erreur lors de l'assignation");
+      setTimeout(() => setValidateFeedback(null), 2500);
+    } finally {
+      setAssigning(false);
     }
   };
 
@@ -270,16 +318,76 @@ export default function HistoryPage() {
 
             {/* Validation status banner */}
             {expandedEntry.validated ? (
-              <div className="flex items-center gap-3 bg-lime/15 border-2 border-lime/40 rounded-xl px-4 py-3">
-                <span className="text-lg">✓</span>
-                <div>
-                  <div className="text-olive font-display tracking-wider text-sm">
-                    SCRIPT {ANGLE_LABELS[expandedEntry.validated].label} VALIDÉ
+              <div className="space-y-3">
+                <div className="flex items-center gap-3 bg-lime/15 border-2 border-lime/40 rounded-xl px-4 py-3">
+                  <span className="text-lg">✓</span>
+                  <div className="flex-1">
+                    <div className="text-olive font-display tracking-wider text-sm">
+                      SCRIPT {ANGLE_LABELS[expandedEntry.validated].label} VALIDÉ
+                    </div>
+                    <div className="text-olive-muted text-[10px] mt-0.5">
+                      Clique sur ✓ Valider sur un autre angle pour changer, ou sur le même pour retirer la validation.
+                    </div>
                   </div>
-                  <div className="text-olive-muted text-[10px] mt-0.5">
-                    Clique sur ✓ Valider sur un autre angle pour changer, ou sur le même pour retirer la validation.
-                  </div>
+                  {expandedEntry.packageName && (
+                    <div className="text-[10px] text-lime-dark font-display tracking-widest px-3 py-1.5 bg-lime/20 rounded-lg border border-lime/50">
+                      📦 {expandedEntry.packageName}
+                    </div>
+                  )}
                 </div>
+
+                {/* Package Assignment Section - Prominent */}
+                {packages.length > 0 && (
+                  <div className="bg-gradient-to-r from-lime/10 to-olive/5 border-2 border-lime/30 rounded-2xl p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <span className="text-2xl">📦</span>
+                      <div>
+                        <div className="font-display text-olive tracking-wider text-base">
+                          {expandedEntry.packageId ? "CHANGER DE PACKAGE" : "AJOUTER À UN PACKAGE"}
+                        </div>
+                        <div className="text-olive-muted text-[10px] mt-0.5">
+                          Organisez vos scripts validés par package
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-3 items-end">
+                      <div className="flex-1">
+                        <label className="block text-[9px] text-olive-muted uppercase tracking-widest font-semibold mb-2">
+                          Sélectionnez un package
+                        </label>
+                        <select
+                          value={selectedPackage}
+                          onChange={(e) => setSelectedPackage(e.target.value)}
+                          className="w-full bg-white border-2 border-olive/20 focus:border-lime/50 rounded-xl px-4 py-3 text-olive text-sm focus:outline-none transition-colors"
+                        >
+                          <option value="">— Choisir un package —</option>
+                          {packages.map((pkg) => (
+                            <option key={pkg.id} value={pkg.id}>
+                              {pkg.name} ({pkg.companyName || "Sans entreprise"}) - {pkg.scriptType.toUpperCase()}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button
+                        onClick={handleAssignPackage}
+                        disabled={!selectedPackage || assigning}
+                        className="bg-lime hover:bg-lime-dark disabled:opacity-40 disabled:cursor-not-allowed text-olive font-display tracking-widest text-sm rounded-xl px-8 py-3 transition-all shadow-lg shadow-lime/20 hover:shadow-xl hover:shadow-lime/30 disabled:shadow-none flex items-center gap-2"
+                      >
+                        {assigning ? (
+                          <>
+                            <span className="w-4 h-4 border-2 border-olive/30 border-t-olive rounded-full animate-spin" />
+                            <span>ASSIGNATION...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>✓</span>
+                            <span>ASSIGNER AU PACKAGE</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-3 bg-olive/[0.04] border border-olive/10 rounded-xl px-4 py-3">

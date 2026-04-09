@@ -57,6 +57,17 @@ export default function CompanyDetailPage({
   const [editAiLoading, setEditAiLoading] = useState(false);
   const [assigningPackages, setAssigningPackages] = useState<Record<string, string>>({});
 
+  // AI autofill
+  const [autofilling, setAutofilling] = useState(false);
+  const [autofillSuggestions, setAutofillSuggestions] = useState<{
+    niche?: string;
+    description?: string;
+    communicationStyle?: string;
+    targetAudience?: string;
+    servicesProducts?: string;
+    brandVoice?: string;
+  } | null>(null);
+
   // Editable form state
   const [form, setForm] = useState({
     name: "",
@@ -112,6 +123,32 @@ export default function CompanyDetailPage({
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleAutofill = async () => {
+    setAutofilling(true);
+    setAutofillSuggestions(null);
+    try {
+      const res = await fetch(`/api/companies/${id}/autofill`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      const d = await res.json();
+      setAutofillSuggestions(d.suggestions);
+    } catch { /* silent */ }
+    finally { setAutofilling(false); }
+  };
+
+  const handleApplySuggestions = () => {
+    if (!autofillSuggestions) return;
+    setForm((prev) => ({
+      ...prev,
+      niche: autofillSuggestions.niche || prev.niche,
+      description: autofillSuggestions.description || prev.description,
+      communicationStyle: autofillSuggestions.communicationStyle || prev.communicationStyle,
+      targetAudience: autofillSuggestions.targetAudience || prev.targetAudience,
+      servicesProducts: autofillSuggestions.servicesProducts || prev.servicesProducts,
+      brandVoice: autofillSuggestions.brandVoice || prev.brandVoice,
+    }));
+    setAutofillSuggestions(null);
   };
 
   const toggleType = (t: ScriptType) => {
@@ -297,6 +334,73 @@ export default function CompanyDetailPage({
                 ✓ Profil sauvegardé — sera utilisé pour les prochaines générations
               </div>
             )}
+
+            {/* AI Autofill banner */}
+            <div className="bg-gradient-to-r from-lime/15 to-lime/5 border-2 border-lime/30 rounded-2xl p-5">
+              <div className="flex items-center justify-between gap-4">
+                <div className="flex items-start gap-3">
+                  <span className="text-2xl">✦</span>
+                  <div>
+                    <div className="font-display text-olive tracking-wider text-sm">REMPLISSAGE AUTOMATIQUE PAR L&apos;IA</div>
+                    <p className="text-olive-muted text-xs mt-0.5 leading-relaxed">
+                      L&apos;IA analyse <strong className="text-olive">{company.name ?? company.domain}</strong> et propose un profil marketing complet. Tu peux ensuite modifier chaque champ.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleAutofill}
+                  disabled={autofilling}
+                  className="shrink-0 bg-olive hover:bg-olive-dark disabled:opacity-50 disabled:cursor-not-allowed text-white font-display tracking-widest text-xs rounded-xl px-5 py-3 transition-all flex items-center gap-2"
+                >
+                  {autofilling ? (
+                    <><span className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> ANALYSE EN COURS…</>
+                  ) : (
+                    <>✦ REMPLIR AVEC L&apos;IA</>
+                  )}
+                </button>
+              </div>
+
+              {/* Suggestions preview */}
+              {autofillSuggestions && (
+                <div className="mt-4 border-t border-lime/20 pt-4 space-y-3">
+                  <div className="text-[10px] font-display tracking-widest text-olive-muted uppercase mb-2">
+                    ✓ Suggestions générées — vérifie et applique :
+                  </div>
+                  <div className="grid grid-cols-1 gap-2">
+                    {Object.entries(autofillSuggestions).map(([key, value]) => {
+                      const labels: Record<string, string> = {
+                        niche: "Niche / Secteur",
+                        description: "Description",
+                        communicationStyle: "Style de communication",
+                        targetAudience: "Cible principale",
+                        servicesProducts: "Produits / Services",
+                        brandVoice: "Personnalité de marque",
+                      };
+                      return value ? (
+                        <div key={key} className="bg-white/70 rounded-xl px-3 py-2.5 border border-lime/20">
+                          <div className="text-[9px] font-display tracking-widest text-olive-muted uppercase mb-1">{labels[key] ?? key}</div>
+                          <p className="text-xs text-olive leading-relaxed">{value}</p>
+                        </div>
+                      ) : null;
+                    })}
+                  </div>
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => setAutofillSuggestions(null)}
+                      className="flex-1 bg-cream-input border-2 border-olive/15 text-olive-muted hover:text-olive rounded-xl py-2.5 text-[10px] font-display tracking-widest transition-all"
+                    >
+                      IGNORER
+                    </button>
+                    <button
+                      onClick={handleApplySuggestions}
+                      className="flex-1 bg-olive hover:bg-olive-dark text-white font-display tracking-widest rounded-xl py-2.5 text-[10px] transition-all"
+                    >
+                      ✓ APPLIQUER TOUTES LES SUGGESTIONS
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
 
             <div className="bg-white border-2 border-olive/10 rounded-2xl p-6 space-y-5">
               <SectionTitle>Identité</SectionTitle>

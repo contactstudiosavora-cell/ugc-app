@@ -28,7 +28,7 @@ export async function GET(
     // Get client feedbacks for these scripts
     const feedbacks = await db.clientFeedbacks?.find(
       { packageId: pkg._id },
-      { projection: { _id: 1, scriptId: 1, modifiedContent: 1, comments: 1, createdAt: 1 } }
+      { projection: { _id: 1, scriptId: 1, modifiedContent: 1, comments: 1, validated: 1, createdAt: 1 } }
     ).toArray() || [];
 
     // Get company info
@@ -59,6 +59,7 @@ export async function GET(
         scriptId: f.scriptId,
         modifiedContent: f.modifiedContent,
         comments: f.comments,
+        validated: f.validated ?? false,
         createdAt: f.createdAt.toISOString(),
       })),
     });
@@ -67,7 +68,7 @@ export async function GET(
   }
 }
 
-// PATCH - Save client modifications and comments for a specific script
+// PATCH - Save client modifications, comments, and validation for a specific script
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { token: string } }
@@ -78,6 +79,7 @@ export async function PATCH(
       scriptId: string;
       modifiedContent?: string;
       comments?: string;
+      validated?: boolean;
     };
 
     const db = await getDb();
@@ -104,6 +106,7 @@ export async function PATCH(
         $set: {
           modifiedContent: body.modifiedContent || null,
           comments: body.comments || null,
+          validated: body.validated ?? false,
           updatedAt: new Date(),
         },
         $setOnInsert: {

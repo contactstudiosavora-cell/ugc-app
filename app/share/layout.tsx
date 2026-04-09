@@ -1,11 +1,10 @@
 export default function ShareLayout({ children }: { children: React.ReactNode }) {
-  // This layout resets the sidebar margin applied by the root layout
+  // Completely independent layout - no sidebar, no navigation
   return (
-    <div
-      style={{ marginLeft: "-220px", width: "100vw", minHeight: "100vh" }}
-      className="bg-[#F5F2EB]"
-    >
-      {children}
-    </div>
+    <html lang="fr">
+      <body className="bg-cream">
+        {children}
+      </body>
+    </html>
   );
 }

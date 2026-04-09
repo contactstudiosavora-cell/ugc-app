@@ -16,6 +16,7 @@ interface Feedback {
   scriptId: string;
   modifiedContent: string | null;
   comments: string | null;
+  validated: boolean;
   createdAt: string;
 }
 
@@ -109,6 +110,7 @@ export default function SharePackagePage() {
           scriptId,
           modifiedContent: editedContents[scriptId],
           comments: comments[scriptId],
+          validated: prev[scriptId]?.validated ?? false,
           createdAt: new Date().toISOString(),
         },
       }));
@@ -119,7 +121,50 @@ export default function SharePackagePage() {
     }
   };
 
+  const handleValidateScript = async (scriptId: string) => {
+    const currentValidation = feedbacks[scriptId]?.validated ?? false;
+    
+    try {
+      const res = await fetch(`/api/share/package/${token}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          scriptId,
+          modifiedContent: editedContents[scriptId],
+          comments: comments[scriptId],
+          validated: !currentValidation,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      
+      // Update local feedbacks
+      setFeedbacks((prev) => ({
+        ...prev,
+        [scriptId]: {
+          ...(prev[scriptId] || {
+            id: `fb_${scriptId}`,
+            scriptId,
+            modifiedContent: editedContents[scriptId],
+            comments: comments[scriptId],
+            createdAt: new Date().toISOString(),
+          }),
+          validated: !currentValidation,
+        },
+      }));
+    } catch {
+      alert("Erreur lors de la validation");
+    }
+  };
+
   const handleValidatePackage = async () => {
+    // Check if all scripts are validated
+    const allValidated = scripts.every((s) => feedbacks[s.id]?.validated);
+    
+    if (!allValidated) {
+      alert("Veuillez valider tous les scripts avant de valider le package complet.");
+      return;
+    }
+
     if (!confirm("Êtes-vous sûr de vouloir valider ce package ? Cela notifiera l'équipe.")) {
       return;
     }
@@ -200,6 +245,7 @@ export default function SharePackagePage() {
           {scripts.map((script, index) => {
             const angleInfo = ANGLE_LABELS[script.angle] || { emoji: "📝", label: script.angle };
             const isSaved = feedbacks[script.id];
+            const isValidated = feedbacks[script.id]?.validated ?? false;
             const hasChanges = editedContents[script.id] !== script.content || comments[script.id];
 
             return (
@@ -217,11 +263,18 @@ export default function SharePackagePage() {
                       </div>
                     </div>
                   </div>
-                  {isSaved && (
-                    <div className="text-[9px] text-lime-dark font-display tracking-widest bg-lime/20 px-3 py-1.5 rounded-lg border border-lime/50">
-                      ✓ SAUVEGARDÉ
-                    </div>
-                  )}
+                  <div className="flex items-center gap-2">
+                    {isSaved && !isValidated && (
+                      <div className="text-[9px] text-lime-dark font-display tracking-widest bg-lime/20 px-3 py-1.5 rounded-lg border border-lime/50">
+                        💾 SAUVEGARDÉ
+                      </div>
+                    )}
+                    {isValidated && (
+                      <div className="text-[9px] text-olive font-display tracking-widest bg-lime/30 px-3 py-1.5 rounded-lg border-2 border-lime/60">
+                        ✓ VALIDÉ
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Script Content - Editable */}
@@ -233,8 +286,9 @@ export default function SharePackagePage() {
                     <textarea
                       value={editedContents[script.id] || ""}
                       onChange={(e) => setEditedContents((prev) => ({ ...prev, [script.id]: e.target.value }))}
+                      disabled={isValidated}
                       rows={12}
-                      className="w-full bg-cream-input border-2 border-olive/15 focus:border-lime/50 rounded-xl px-4 py-3 text-olive-muted text-sm leading-relaxed focus:outline-none resize-none"
+                      className="w-full bg-cream-input border-2 border-olive/15 focus:border-lime/50 rounded-xl px-4 py-3 text-olive-muted text-sm leading-relaxed focus:outline-none resize-none disabled:opacity-60 disabled:cursor-not-allowed"
                       placeholder="Modifiez le script ici..."
                     />
                   </div>
@@ -246,30 +300,60 @@ export default function SharePackagePage() {
                     <textarea
                       value={comments[script.id] || ""}
                       onChange={(e) => setComments((prev) => ({ ...prev, [script.id]: e.target.value }))}
+                      disabled={isValidated}
                       rows={3}
-                      className="w-full bg-cream-input border-2 border-olive/15 focus:border-lime/50 rounded-xl px-4 py-3 text-olive-muted text-sm leading-relaxed focus:outline-none resize-none"
+                      className="w-full bg-cream-input border-2 border-olive/15 focus:border-lime/50 rounded-xl px-4 py-3 text-olive-muted text-sm leading-relaxed focus:outline-none resize-none disabled:opacity-60 disabled:cursor-not-allowed"
                       placeholder="Ajoutez vos remarques, suggestions ou questions..."
                     />
                   </div>
 
-                  {/* Save Button */}
-                  <button
-                    onClick={() => handleSaveScript(script.id)}
-                    disabled={saving[script.id] || !hasChanges}
-                    className="bg-lime hover:bg-lime-dark disabled:opacity-40 disabled:cursor-not-allowed text-olive font-display tracking-widest text-sm rounded-xl px-6 py-3 transition-all shadow-md hover:shadow-lg disabled:shadow-none flex items-center gap-2"
-                  >
-                    {saving[script.id] ? (
+                  {/* Action Buttons */}
+                  <div className="flex gap-3">
+                    {!isValidated && (
                       <>
-                        <span className="w-4 h-4 border-2 border-olive/30 border-t-olive rounded-full animate-spin" />
-                        <span>SAUVEGARDE...</span>
-                      </>
-                    ) : (
-                      <>
-                        <span>💾</span>
-                        <span>SAUVEGARDER CE SCRIPT</span>
+                        <button
+                          onClick={() => handleSaveScript(script.id)}
+                          disabled={saving[script.id] || !hasChanges}
+                          className="flex-1 bg-lime/15 hover:bg-lime/25 disabled:opacity-40 disabled:cursor-not-allowed border-2 border-lime/30 text-olive font-display tracking-widest text-sm rounded-xl px-6 py-3 transition-all flex items-center justify-center gap-2"
+                        >
+                          {saving[script.id] ? (
+                            <>
+                              <span className="w-4 h-4 border-2 border-olive/30 border-t-olive rounded-full animate-spin" />
+                              <span>SAUVEGARDE...</span>
+                            </>
+                          ) : (
+                            <>
+                              <span>💾</span>
+                              <span>SAUVEGARDER</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => handleValidateScript(script.id)}
+                          disabled={hasChanges && !isSaved}
+                          className="flex-1 bg-lime hover:bg-lime-dark disabled:opacity-40 disabled:cursor-not-allowed text-olive font-display tracking-widest text-sm rounded-xl px-6 py-3 transition-all shadow-md hover:shadow-lg disabled:shadow-none flex items-center justify-center gap-2"
+                        >
+                          <span>✓</span>
+                          <span>VALIDER CE SCRIPT</span>
+                        </button>
                       </>
                     )}
-                  </button>
+                    {isValidated && (
+                      <button
+                        onClick={() => handleValidateScript(script.id)}
+                        className="flex-1 bg-olive/10 hover:bg-olive/20 border-2 border-olive/30 text-olive font-display tracking-widest text-sm rounded-xl px-6 py-3 transition-all flex items-center justify-center gap-2"
+                      >
+                        <span>↻</span>
+                        <span>ANNULER LA VALIDATION</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {hasChanges && !isSaved && !isValidated && (
+                    <p className="text-[10px] text-orange-600 text-center">
+                      ⚠️ Sauvegardez vos modifications avant de valider ce script
+                    </p>
+                  )}
                 </div>
               </div>
             );
@@ -278,15 +362,17 @@ export default function SharePackagePage() {
           {/* Validate Package Button */}
           <div className="bg-gradient-to-r from-lime/10 to-olive/5 border-2 border-lime/30 rounded-2xl p-8 text-center">
             <h2 className="font-display text-2xl text-olive tracking-wider mb-3">
-              VALIDER LE PACKAGE
+              VALIDER LE PACKAGE COMPLET
             </h2>
-            <p className="text-olive-muted text-sm mb-6 max-w-2xl mx-auto">
-              Une fois que vous avez terminé vos modifications et commentaires, validez le package pour notifier l'équipe.
+            <p className="text-olive-muted text-sm mb-2 max-w-2xl mx-auto">
+              {scripts.every((s) => feedbacks[s.id]?.validated)
+                ? "✅ Tous les scripts sont validés ! Vous pouvez maintenant valider le package complet."
+                : `📋 ${scripts.filter((s) => feedbacks[s.id]?.validated).length} / ${scripts.length} scripts validés. Validez tous les scripts pour pouvoir valider le package.`}
             </p>
             <button
               onClick={handleValidatePackage}
-              disabled={validating}
-              className="bg-olive hover:bg-olive-dark disabled:opacity-40 disabled:cursor-not-allowed text-lime font-display tracking-widest text-lg rounded-xl px-10 py-4 transition-all shadow-xl hover:shadow-2xl disabled:shadow-none inline-flex items-center gap-3"
+              disabled={validating || !scripts.every((s) => feedbacks[s.id]?.validated)}
+              className="bg-olive hover:bg-olive-dark disabled:opacity-40 disabled:cursor-not-allowed text-lime font-display tracking-widest text-lg rounded-xl px-10 py-4 transition-all shadow-xl hover:shadow-2xl disabled:shadow-none inline-flex items-center gap-3 mt-4"
             >
               {validating ? (
                 <>

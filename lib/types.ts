@@ -127,6 +127,7 @@ export interface ClientFeedbackDoc {
   scriptId: string;
   modifiedContent: string | null;
   comments: string | null;
+  validated: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -137,6 +138,7 @@ export interface ClientFeedbackRow {
   scriptId: string;
   modifiedContent: string | null;
   comments: string | null;
+  validated: boolean;
   createdAt: string;
   updatedAt: string;
 }

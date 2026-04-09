@@ -56,6 +56,11 @@ export default function Home() {
   const [validatedAngle, setValidatedAngle] = useState<ScriptAngle | null>(null);
   const [validateFeedback, setValidateFeedback] = useState<string | null>(null);
 
+  // Manual editing
+  const [manualEditing, setManualEditing] = useState(false);
+  const [manualContent, setManualContent] = useState("");
+  const [manualSaving, setManualSaving] = useState(false);
+
   // Load companies on mount
   useEffect(() => {
     fetch("/api/companies")
@@ -75,6 +80,11 @@ export default function Home() {
   }, [selectedCompanyId]);
 
   const selectedCompany = companies.find((c) => c.id === selectedCompanyId);
+
+  // Reset manual editing when angle changes
+  useEffect(() => {
+    setManualEditing(false);
+  }, [activeAngle]);
 
   /* ─── Handlers ──────────────────────────────────────────────── */
 
@@ -139,6 +149,42 @@ export default function Home() {
       setEditInstruction("");
     } catch { /* silent */ }
     finally { setEditing(false); }
+  };
+
+  const handleToggleManualEdit = () => {
+    if (!scripts) return;
+    if (!manualEditing) {
+      setManualContent(scripts[activeAngle]);
+      setManualEditing(true);
+    } else {
+      setManualEditing(false);
+    }
+  };
+
+  const handleSaveManual = async () => {
+    if (!scripts || !manualContent) return;
+    setManualSaving(true);
+    try {
+      setScripts((prev) => prev ? { ...prev, [activeAngle]: manualContent } : prev);
+      const angleIndex = ANGLES.findIndex((a) => a.type === activeAngle);
+      const scriptId = scriptIds[angleIndex];
+      if (scriptId) {
+        await fetch(`/api/scripts/${scriptId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: manualContent }),
+        }).catch(() => null);
+      } else if (genId) {
+        await fetch("/api/history", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: genId, angle: activeAngle, content: manualContent }),
+        }).catch(() => null);
+      }
+      setManualEditing(false);
+    } finally {
+      setManualSaving(false);
+    }
   };
 
   const copyScript = async () => {
@@ -566,19 +612,52 @@ export default function Home() {
                       {validatedAngle ? "⇄ CHANGER" : "✓ VALIDER"}
                     </OutlineBtn>
                   )}
+                  <OutlineBtn onClick={handleToggleManualEdit}>
+                    {manualEditing ? "✕ ANNULER ÉDITION" : "✏ ÉDITER"}
+                  </OutlineBtn>
                 </div>
               </div>
 
               {/* Script body */}
               <div className="p-5">
-                <ScriptRenderer content={scripts[activeAngle]} />
+                {manualEditing ? (
+                  <textarea
+                    value={manualContent}
+                    onChange={(e) => setManualContent(e.target.value)}
+                    rows={18}
+                    autoFocus
+                    className="w-full bg-cream-input border-2 border-olive/15 rounded-xl px-4 py-3 text-olive text-sm focus:border-olive transition-colors resize-none font-mono leading-relaxed"
+                  />
+                ) : (
+                  <ScriptRenderer content={scripts[activeAngle]} />
+                )}
               </div>
+
+              {/* Manual edit save toolbar */}
+              {manualEditing && (
+                <div className="px-5 pb-4 flex gap-2">
+                  <button
+                    onClick={() => setManualEditing(false)}
+                    className="flex-1 bg-cream-input border-2 border-olive/15 text-olive-muted hover:text-olive rounded-xl py-2.5 text-[10px] font-display tracking-widest transition-all"
+                  >
+                    ANNULER
+                  </button>
+                  <button
+                    onClick={handleSaveManual}
+                    disabled={manualSaving}
+                    className="flex-1 bg-olive hover:bg-olive-dark disabled:opacity-40 text-white font-display tracking-widest rounded-xl py-2.5 text-[10px] transition-all flex items-center justify-center gap-2"
+                  >
+                    {manualSaving ? <Spinner /> : null}
+                    {manualSaving ? "SAUVEGARDE…" : "💾 SAUVEGARDER"}
+                  </button>
+                </div>
+              )}
 
               {/* AI Edit */}
               <div className="px-5 pb-5">
                 <div className="bg-cream-card border-2 border-olive/8 rounded-xl p-4">
                   <div className="flex items-center gap-2 text-olive-muted mb-3">
-                    <span className="text-[10px] uppercase tracking-[0.2em] font-semibold">✏ Modifier avec l&apos;IA</span>
+                    <span className="text-[10px] uppercase tracking-[0.2em] font-semibold">✦ Modifier avec l&apos;IA</span>
                   </div>
                   <div className="flex gap-2">
                     <input

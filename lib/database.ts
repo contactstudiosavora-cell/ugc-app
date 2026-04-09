@@ -901,6 +901,24 @@ export async function setValidation(
   return result.matchedCount > 0;
 }
 
+/**
+ * Update the content of a specific angle's script inside a generation document.
+ */
+export async function updateGenerationScript(
+  generationId: string,
+  angle: string,
+  content: string
+): Promise<boolean> {
+  const db = await getDb();
+  const result = await db
+    .collection<GenerationDoc>("generations")
+    .updateOne(
+      { _id: generationId },
+      { $set: { [`scripts.${angle}`]: content } }
+    );
+  return result.matchedCount > 0;
+}
+
 /* ─── History ─────────────────────────────────────────────────────── */
 
 function docToHistoryEntry(doc: GenerationDoc, companyName?: string | null, packageName?: string | null): HistoryEntry {

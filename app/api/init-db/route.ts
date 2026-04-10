@@ -147,16 +147,33 @@ export async function POST() {
 
     results.push(`✓ Scripts rétro-créés depuis générations validées : ${scriptsCreated}`);
 
-    /* ── 5. REPAIR — fix null/missing content in scripts ────────── */
+    /* ── 5. REPAIR — restore content from generations for empty scripts ── */
 
-    const nullContentFixed = await db.collection("scripts").updateMany(
-      { $or: [{ content: null }, { content: { $exists: false } }] },
-      { $set: { content: "" } }
-    );
-    if (nullContentFixed.modifiedCount > 0) {
-      results.push(`✓ Scripts réparés (content null → "") : ${nullContentFixed.modifiedCount}`);
+    // Find scripts with empty/null content that have a generationId
+    // (content was accidentally set to null by a BSON serialization bug)
+    const emptyScripts = await db.collection("scripts").find({
+      $or: [{ content: null }, { content: "" }, { content: { $exists: false } }],
+      generationId: { $exists: true, $ne: null },
+    }).toArray();
+
+    let restoredCount = 0;
+    for (const script of emptyScripts) {
+      const gen = await db.collection("generations").findOne({ _id: script.generationId });
+      if (!gen) continue;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const content = (gen as any).scripts?.[script.angle];
+      if (!content) continue;
+      await db.collection("scripts").updateOne(
+        { _id: script._id },
+        { $set: { content } }
+      );
+      restoredCount++;
+    }
+    if (restoredCount > 0) {
+      results.push(`✓ Contenu restauré depuis générations : ${restoredCount} script(s) réparés`);
     }
 
+    // Fix any remaining null status fields
     const nullStatusFixed = await db.collection("scripts").updateMany(
       { $or: [{ status: null }, { status: { $exists: false } }] },
       { $set: { status: "generated" } }

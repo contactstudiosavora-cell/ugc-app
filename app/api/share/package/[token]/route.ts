@@ -1,41 +1,38 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/database";
+import type { PackageDoc, ScriptDoc, CompanyDoc } from "@/lib/types";
 
 export async function GET(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const token = params.token;
+    const { token } = await params;
     const db = await getDb();
-    
+
     // Find package by shareToken
-    const pkg = await db.packages.findOne(
-      { shareToken: token },
-      { projection: { _id: 1, companyId: 1, name: 1, scriptType: 1, status: 1, scriptCount: 1, createdAt: 1 } }
-    );
-    
+    const pkg = await db.collection<PackageDoc>("packages").findOne({ shareToken: token });
+
     if (!pkg) {
       return NextResponse.json({ error: "Package not found" }, { status: 404 });
     }
 
     // Get scripts for this package
-    const scripts = await db.scripts.find(
-      { packageId: pkg._id },
-      { projection: { _id: 1, angle: 1, content: 1, status: 1, createdAt: 1 } }
-    ).toArray();
+    const scripts = await db
+      .collection<ScriptDoc>("scripts")
+      .find({ packageId: pkg._id })
+      .sort({ createdAt: 1 })
+      .toArray();
 
     // Get client feedbacks for these scripts
-    const feedbacks = await db.clientFeedbacks?.find(
-      { packageId: pkg._id },
-      { projection: { _id: 1, scriptId: 1, modifiedContent: 1, comments: 1, validated: 1, createdAt: 1 } }
-    ).toArray() || [];
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const feedbacks = await db.collection<any>("client_feedbacks")
+      .find({ packageId: pkg._id })
+      .toArray()
+      .catch(() => []);
 
     // Get company info
-    const company = await db.companies.findOne(
-      { _id: pkg.companyId },
-      { projection: { name: 1 } }
-    );
+    const company = await db.collection<CompanyDoc>("companies").findOne({ _id: pkg.companyId });
 
     return NextResponse.json({
       package: {
@@ -45,22 +42,23 @@ export async function GET(
         status: pkg.status,
         scriptCount: pkg.scriptCount,
         companyName: company?.name || null,
-        createdAt: pkg.createdAt.toISOString(),
+        createdAt: pkg.createdAt instanceof Date ? pkg.createdAt.toISOString() : pkg.createdAt,
       },
       scripts: scripts.map((s) => ({
         id: s._id,
         angle: s.angle,
         content: s.content,
         status: s.status,
-        createdAt: s.createdAt.toISOString(),
+        createdAt: s.createdAt instanceof Date ? s.createdAt.toISOString() : s.createdAt,
       })),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       feedbacks: feedbacks.map((f: any) => ({
         id: f._id,
         scriptId: f.scriptId,
         modifiedContent: f.modifiedContent,
         comments: f.comments,
         validated: f.validated ?? false,
-        createdAt: f.createdAt.toISOString(),
+        createdAt: f.createdAt instanceof Date ? f.createdAt.toISOString() : f.createdAt,
       })),
     });
   } catch (e) {
@@ -71,10 +69,10 @@ export async function GET(
 // PATCH - Save client modifications, comments, and validation for a specific script
 export async function PATCH(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const token = params.token;
+    const { token } = await params;
     const body = await req.json() as {
       scriptId: string;
       modifiedContent?: string;
@@ -83,24 +81,17 @@ export async function PATCH(
     };
 
     const db = await getDb();
-    
+
     // Find package by shareToken
-    const pkg = await db.packages.findOne(
-      { shareToken: token },
-      { projection: { _id: 1 } }
-    );
-    
+    const pkg = await db.collection<PackageDoc>("packages").findOne({ shareToken: token });
+
     if (!pkg) {
       return NextResponse.json({ error: "Package not found" }, { status: 404 });
     }
 
-    // Create or ensure clientFeedbacks collection exists
-    if (!db.clientFeedbacks) {
-      await db.createCollection("clientFeedbacks");
-    }
-
     // Upsert feedback
-    await db.clientFeedbacks.updateOne(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await db.collection<any>("client_feedbacks").updateOne(
       { packageId: pkg._id, scriptId: body.scriptId },
       {
         $set: {
@@ -125,32 +116,28 @@ export async function PATCH(
   }
 }
 
-// POST - Validate package
+// POST - Validate entire package
 export async function POST(
   req: NextRequest,
-  { params }: { params: { token: string } }
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
-    const token = params.token;
+    const { token } = await params;
     const db = await getDb();
-    
+
     // Find package by shareToken
-    const pkg = await db.packages.findOne(
-      { shareToken: token },
-      { projection: { _id: 1 } }
-    );
-    
+    const pkg = await db.collection<PackageDoc>("packages").findOne({ shareToken: token });
+
     if (!pkg) {
       return NextResponse.json({ error: "Package not found" }, { status: 404 });
     }
 
-    // Update package status to indicate client validation
-    await db.packages.updateOne(
+    // Update package status to completed (client validated)
+    await db.collection<PackageDoc>("packages").updateOne(
       { _id: pkg._id },
       {
         $set: {
           status: "completed",
-          clientValidatedAt: new Date(),
           updatedAt: new Date(),
         },
       }

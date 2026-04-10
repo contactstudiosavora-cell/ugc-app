@@ -246,7 +246,7 @@ export default function SharePackagePage() {
             const angleInfo = ANGLE_LABELS[script.angle] || { emoji: "📝", label: script.angle };
             const isSaved = feedbacks[script.id];
             const isValidated = feedbacks[script.id]?.validated ?? false;
-            const hasChanges = editedContents[script.id] !== script.content || comments[script.id];
+            const hasChanges = editedContents[script.id] !== script.content || !!comments[script.id];
 
             return (
               <div key={script.id} className="bg-white border-2 border-olive/10 rounded-2xl overflow-hidden shadow-sm">

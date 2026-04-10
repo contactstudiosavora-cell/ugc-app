@@ -1,17 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getDb } from "@/lib/database";
 import { randomBytes } from "crypto";
+import type { PackageDoc } from "@/lib/types";
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const id = params.id;
+    const { id } = await params;
     const db = await getDb();
-    
+
     // Check if package exists
-    const pkg = await db.packages.findOne({ _id: id }, { projection: { _id: 0 } });
+    const pkg = await db.collection<PackageDoc>("packages").findOne({ _id: id });
     if (!pkg) {
       return NextResponse.json({ error: "Package not found" }, { status: 404 });
     }
@@ -20,7 +21,7 @@ export async function POST(
     let shareToken = pkg.shareToken;
     if (!shareToken) {
       shareToken = randomBytes(16).toString("hex");
-      await db.packages.updateOne(
+      await db.collection<PackageDoc>("packages").updateOne(
         { _id: id },
         { $set: { shareToken, updatedAt: new Date() } }
       );

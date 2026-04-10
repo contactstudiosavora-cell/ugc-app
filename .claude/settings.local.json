@@ -19,7 +19,17 @@
       "Bash(python -m json.tool)",
       "Bash(curl -s -X POST https://ugc-app-akow.vercel.app/api/init-db)",
       "Bash(curl -s \"https://ugc-app-akow.vercel.app/api/debug\")",
-      "Bash(npx tsc:*)"
+      "Bash(npx tsc:*)",
+      "Bash(ls C:/Users/noahr/ugc-plateforme/app/share/[token]/)",
+      "Bash(ls C:/Users/noahr/ugc-plateforme/app/packages/[id]/)",
+      "Bash(ls C:/Users/noahr/ugc-plateforme/app/api/packages/[id]/)",
+      "Bash(cp \"app/page.tsx\" \"app/\\(admin\\)/page.tsx\")",
+      "Bash(cp \"app/history/page.tsx\" \"app/\\(admin\\)/history/page.tsx\")",
+      "Bash(cp \"app/companies/page.tsx\" \"app/\\(admin\\)/companies/page.tsx\")",
+      "Bash(cp \"app/companies/[id]/page.tsx\" \"app/\\(admin\\)/companies/[id]/page.tsx\")",
+      "Bash(cp \"app/packages/page.tsx\" \"app/\\(admin\\)/packages/page.tsx\")",
+      "Bash(rm \"app/page.tsx\" \"app/history/page.tsx\" \"app/companies/page.tsx\" \"app/companies/[id]/page.tsx\" \"app/packages/page.tsx\" \"app/packages/[id]/page.tsx\" \"app/production/page.tsx\" \"app/reference-scripts/page.tsx\")",
+      "Bash(rmdir \"app/history\" \"app/companies/[id]\" \"app/companies\" \"app/packages/[id]\" \"app/packages\" \"app/production\" \"app/reference-scripts\")"
     ]
   }
 }

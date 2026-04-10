@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import { Bebas_Neue } from "next/font/google";
 import "./globals.css";
-import Sidebar from "@/components/Sidebar";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const bebas = Bebas_Neue({
@@ -26,8 +25,7 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${bebas.variable} font-sans antialiased min-h-screen bg-cream text-olive`}
       >
-        <Sidebar />
-        <div className="ml-[220px] min-h-screen flex flex-col">{children}</div>
+        {children}
       </body>
     </html>
   );

@@ -206,7 +206,7 @@ export default function CompaniesPage() {
     <div className="flex h-screen overflow-hidden bg-cream">
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Header */}
-        <div className="px-8 pt-8 pb-6 border-b border-olive/10 bg-cream-card flex items-center justify-between">
+        <div className="px-4 md:px-8 pt-4 md:pt-8 pb-4 md:pb-6 border-b border-olive/10 bg-cream-card flex items-center justify-between gap-4 flex-wrap">
           <div>
             <div className="flex items-center gap-2 mb-2">
               <span className="w-1.5 h-1.5 rounded-full bg-lime inline-block" />
@@ -228,7 +228,7 @@ export default function CompaniesPage() {
         </div>
 
         {/* Grid */}
-        <div className="flex-1 overflow-y-auto p-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-8">
           {loading ? (
             <div className="flex items-center justify-center h-32 text-olive-muted text-sm uppercase tracking-widest">
               Chargement…

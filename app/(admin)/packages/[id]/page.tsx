@@ -107,7 +107,7 @@ export default function PackageDetailPage() {
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-cream">
       {/* Header */}
-      <div className="bg-cream-card border-b border-olive/10 px-8 py-6 shrink-0">
+      <div className="bg-cream-card border-b border-olive/10 px-4 md:px-8 py-4 md:py-6 shrink-0">
         <div className="flex items-center gap-3 mb-4">
           <Link
             href="/packages"
@@ -122,7 +122,7 @@ export default function PackageDetailPage() {
 
         <h1 className="font-display text-3xl text-olive tracking-wider mb-2">{pkg.name}</h1>
         
-        <div className="flex items-center gap-6 text-sm text-olive-muted">
+        <div className="flex flex-wrap items-center gap-3 md:gap-6 text-sm text-olive-muted">
           {pkg.companyName && (
             <Link 
               href={`/companies/${pkg.companyId}`}
@@ -145,7 +145,7 @@ export default function PackageDetailPage() {
       </div>
 
       {/* Scripts List */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
         <h2 className="font-display text-xl text-olive tracking-wider mb-5">
           SCRIPTS DU PACKAGE ({scripts.length})
         </h2>

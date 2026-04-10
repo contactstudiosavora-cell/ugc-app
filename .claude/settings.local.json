@@ -29,7 +29,8 @@
       "Bash(cp \"app/companies/[id]/page.tsx\" \"app/\\(admin\\)/companies/[id]/page.tsx\")",
       "Bash(cp \"app/packages/page.tsx\" \"app/\\(admin\\)/packages/page.tsx\")",
       "Bash(rm \"app/page.tsx\" \"app/history/page.tsx\" \"app/companies/page.tsx\" \"app/companies/[id]/page.tsx\" \"app/packages/page.tsx\" \"app/packages/[id]/page.tsx\" \"app/production/page.tsx\" \"app/reference-scripts/page.tsx\")",
-      "Bash(rmdir \"app/history\" \"app/companies/[id]\" \"app/companies\" \"app/packages/[id]\" \"app/packages\" \"app/production\" \"app/reference-scripts\")"
+      "Bash(rmdir \"app/history\" \"app/companies/[id]\" \"app/companies\" \"app/packages/[id]\" \"app/packages\" \"app/production\" \"app/reference-scripts\")",
+      "Bash(npx vercel:*)"
     ]
   }
 }

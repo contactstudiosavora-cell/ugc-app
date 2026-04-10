@@ -151,24 +151,24 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
   return (
     <div className="min-h-screen bg-[#F5F2EB]">
       {/* Header */}
-      <div className="bg-white border-b border-[#2C2C1E]/8 px-6 py-4 sticky top-0 z-10">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
-          <div>
+      <div className="bg-white border-b border-[#2C2C1E]/8 px-4 md:px-6 py-4 sticky top-0 z-10">
+        <div className="max-w-3xl mx-auto flex items-center justify-between gap-3">
+          <div className="min-w-0">
             <div className="text-xs text-[#2C2C1E]/40 uppercase tracking-widest font-medium mb-0.5">
               Script à valider
             </div>
-            <h1 className="font-semibold text-[#2C2C1E] text-base">
+            <h1 className="font-semibold text-[#2C2C1E] text-base truncate">
               {script.companyName ?? "Script"}
             </h1>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 shrink-0">
             <span className="w-2 h-2 rounded-full bg-orange-400 inline-block" />
-            <span className="text-xs text-[#2C2C1E]/50 uppercase tracking-widest">En attente de validation</span>
+            <span className="hidden sm:inline text-xs text-[#2C2C1E]/50 uppercase tracking-widest">En attente</span>
           </div>
         </div>
       </div>
 
-      <div className="max-w-3xl mx-auto px-6 py-8 space-y-6">
+      <div className="max-w-3xl mx-auto px-4 md:px-6 py-6 md:py-8 space-y-5 md:space-y-6">
 
         {/* Intro */}
         <div className="bg-white rounded-2xl p-6 border border-[#2C2C1E]/8 shadow-sm">
@@ -203,8 +203,8 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
               <textarea
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
-                rows={20}
-                className="w-full bg-[#F5F2EB] border border-[#2C2C1E]/12 rounded-xl px-4 py-3 text-[#2C2C1E] text-sm leading-relaxed focus:outline-none focus:border-[#2C2C1E]/30 resize-none"
+                rows={14}
+                className="w-full bg-[#F5F2EB] border border-[#2C2C1E]/12 rounded-xl px-4 py-3 text-[#2C2C1E] text-sm leading-relaxed focus:outline-none focus:border-[#2C2C1E]/30 resize-y min-h-[200px]"
                 autoFocus
               />
               {hasChanges && (

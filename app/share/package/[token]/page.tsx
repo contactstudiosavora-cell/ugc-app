@@ -224,7 +224,7 @@ export default function SharePackagePage() {
   return (
     <div className="min-h-screen bg-cream">
       {/* Header */}
-      <div className="bg-white border-b border-olive/10 px-6 md:px-12 py-8">
+      <div className="bg-white border-b border-olive/10 px-4 md:px-12 py-6 md:py-8">
         <div className="max-w-5xl mx-auto">
           <div className="flex items-center gap-2 mb-3">
             <span className="w-2 h-2 rounded-full bg-lime inline-block" />
@@ -232,7 +232,7 @@ export default function SharePackagePage() {
               Révision Client
             </span>
           </div>
-          <h1 className="font-display text-4xl text-olive tracking-wider mb-2">{pkg?.name || "Package"}</h1>
+          <h1 className="font-display text-2xl md:text-4xl text-olive tracking-wider mb-2">{pkg?.name || "Package"}</h1>
           {pkg?.companyName && (
             <p className="text-olive-muted text-sm">Pour : {pkg.companyName}</p>
           )}
@@ -243,8 +243,8 @@ export default function SharePackagePage() {
       </div>
 
       {/* Scripts List */}
-      <div className="px-6 md:px-12 py-8">
-        <div className="max-w-5xl mx-auto space-y-6">
+      <div className="px-4 md:px-12 py-6 md:py-8">
+        <div className="max-w-5xl mx-auto space-y-5 md:space-y-6">
           {scripts.map((script, index) => {
             const angleInfo = ANGLE_LABELS[script.angle] || { emoji: "📝", label: script.angle };
             const isSaved = feedbacks[script.id];
@@ -254,12 +254,12 @@ export default function SharePackagePage() {
             return (
               <div key={script.id} className="bg-white border-2 border-olive/10 rounded-2xl overflow-hidden shadow-sm">
                 {/* Script Header */}
-                <div className="bg-gradient-to-r from-olive/5 to-transparent px-6 py-4 border-b border-olive/10 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <span className="text-2xl">{angleInfo.emoji}</span>
-                    <div>
-                      <div className="font-display text-olive tracking-wider">
-                        Script #{index + 1} - {angleInfo.label}
+                <div className="bg-gradient-to-r from-olive/5 to-transparent px-4 md:px-6 py-4 border-b border-olive/10 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 md:gap-3 min-w-0">
+                    <span className="text-xl md:text-2xl shrink-0">{angleInfo.emoji}</span>
+                    <div className="min-w-0">
+                      <div className="font-display text-olive tracking-wider text-sm md:text-base truncate">
+                        Script #{index + 1} — {angleInfo.label}
                       </div>
                       <div className="text-[10px] text-olive-muted">
                         {new Date(script.createdAt).toLocaleDateString("fr-FR")}
@@ -281,7 +281,7 @@ export default function SharePackagePage() {
                 </div>
 
                 {/* Script Content - View / Edit toggle */}
-                <div className="p-6 space-y-4">
+                <div className="p-4 md:p-6 space-y-4">
                   <div>
                     <div className="flex items-center justify-between mb-3">
                       <label className="text-[10px] text-olive-muted uppercase tracking-widest font-semibold">
@@ -304,8 +304,8 @@ export default function SharePackagePage() {
                       <textarea
                         value={editedContents[script.id] || ""}
                         onChange={(e) => setEditedContents((prev) => ({ ...prev, [script.id]: e.target.value }))}
-                        rows={14}
-                        className="w-full bg-cream-input border-2 border-olive/15 focus:border-lime/50 rounded-xl px-4 py-3 text-olive-muted text-sm leading-relaxed focus:outline-none resize-none"
+                        rows={10}
+                        className="w-full bg-cream-input border-2 border-olive/15 focus:border-lime/50 rounded-xl px-4 py-3 text-olive-muted text-sm leading-relaxed focus:outline-none resize-y min-h-[160px]"
                         placeholder="Modifiez le script ici..."
                         autoFocus
                       />
@@ -336,7 +336,7 @@ export default function SharePackagePage() {
                   </div>
 
                   {/* Action Buttons */}
-                  <div className="flex gap-3">
+                  <div className="flex flex-col sm:flex-row gap-3">
                     {!isValidated && (
                       <>
                         <button
@@ -388,8 +388,8 @@ export default function SharePackagePage() {
           })}
 
           {/* Validate Package Button */}
-          <div className="bg-gradient-to-r from-lime/10 to-olive/5 border-2 border-lime/30 rounded-2xl p-8 text-center">
-            <h2 className="font-display text-2xl text-olive tracking-wider mb-3">
+          <div className="bg-gradient-to-r from-lime/10 to-olive/5 border-2 border-lime/30 rounded-2xl p-5 md:p-8 text-center">
+            <h2 className="font-display text-xl md:text-2xl text-olive tracking-wider mb-3">
               VALIDER LE PACKAGE COMPLET
             </h2>
             <p className="text-olive-muted text-sm mb-2 max-w-2xl mx-auto">

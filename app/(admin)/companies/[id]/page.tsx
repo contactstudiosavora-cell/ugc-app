@@ -321,38 +321,36 @@ export default function CompanyDetailPage({
   return (
     <div className="flex flex-col h-screen overflow-hidden bg-cream">
       {/* Header */}
-      <div className="bg-cream-card border-b border-olive/10 px-8 py-6 flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-4">
-          <Link href="/companies" className="text-olive-muted hover:text-olive text-sm transition-colors">
-            ← Entreprises
-          </Link>
-          <span className="text-olive/20">/</span>
-          <div>
-            <h1 className="font-display text-2xl text-olive tracking-wider">{company.name ?? company.domain}</h1>
-            <p className="text-olive-muted text-xs">{company.domain} · {company.niche && <span className="text-lime-dark">{company.niche}</span>}</p>
+      <div className="bg-cream-card border-b border-olive/10 px-4 md:px-8 py-4 md:py-6 shrink-0">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <Link href="/companies" className="text-olive-muted hover:text-olive text-sm transition-colors shrink-0">
+              ←
+            </Link>
+            <div className="min-w-0">
+              <h1 className="font-display text-lg md:text-2xl text-olive tracking-wider truncate">{company.name ?? company.domain}</h1>
+              <p className="text-olive-muted text-xs truncate">{company.domain}{company.niche && <> · <span className="text-lime-dark">{company.niche}</span></>}</p>
+            </div>
           </div>
-        </div>
 
-        {/* Stats bar */}
-        <div className="flex items-center gap-6">
-          <Stat label="Générations" value={history.length} />
-          <Stat label="Validés" value={validatedCount} accent />
-          <Stat label="Packages" value={packages.length} />
-          <div className="text-center">
-            <div className="font-display text-olive text-base tracking-wider">{profileScore}/6</div>
-            <div className="text-olive-light text-[9px] uppercase tracking-widest">Profil</div>
-            <div className="w-12 h-1 bg-olive/10 rounded-full mt-1 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-lime transition-all"
-                style={{ width: `${(profileScore / 6) * 100}%` }}
-              />
+          {/* Stats bar — hidden on smallest screens */}
+          <div className="hidden sm:flex items-center gap-4 md:gap-6 shrink-0">
+            <Stat label="Générations" value={history.length} />
+            <Stat label="Validés" value={validatedCount} accent />
+            <Stat label="Packages" value={packages.length} />
+            <div className="hidden md:block text-center">
+              <div className="font-display text-olive text-base tracking-wider">{profileScore}/6</div>
+              <div className="text-olive-light text-[9px] uppercase tracking-widest">Profil</div>
+              <div className="w-12 h-1 bg-olive/10 rounded-full mt-1 overflow-hidden">
+                <div className="h-full rounded-full bg-lime transition-all" style={{ width: `${(profileScore / 6) * 100}%` }} />
+              </div>
             </div>
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="bg-cream-card border-b border-olive/10 px-8 flex gap-1 shrink-0">
+      <div className="bg-cream-card border-b border-olive/10 px-2 md:px-8 flex gap-0.5 overflow-x-auto shrink-0 scrollbar-hide">
         {(["profil", "packages", "scripts", "scripts_valides", "modeles"] as Tab[]).map((t) => (
           <button
             key={t}
@@ -373,7 +371,7 @@ export default function CompanyDetailPage({
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-8">
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
         {/* ── PROFIL TAB ──────────────────────────────────────── */}
         {tab === "profil" && (
           <div className="max-w-2xl space-y-5">

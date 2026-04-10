@@ -20,7 +20,12 @@ const NAV = [
   { href: "/reference-scripts", label: "BIBLIOTHÈQUE", icon: "◎" },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+  open?: boolean;
+  onClose?: () => void;
+}
+
+export default function Sidebar({ open, onClose }: SidebarProps) {
   const pathname = usePathname();
   const [budget, setBudget] = useState<BudgetStats | null>(null);
 
@@ -31,12 +36,24 @@ export default function Sidebar() {
       .catch(() => null);
   }, []);
 
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    onClose?.();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathname]);
+
   const pct = budget?.percentUsed ?? 0;
 
   return (
-    <aside className="fixed inset-y-0 left-0 w-[220px] bg-olive-dark border-r border-white/[0.06] flex flex-col z-40">
+    <aside
+      className={`
+        fixed inset-y-0 left-0 w-[220px] bg-olive-dark border-r border-white/[0.06]
+        flex flex-col z-50 transition-transform duration-200
+        ${open ? "translate-x-0" : "-translate-x-full"} md:translate-x-0
+      `}
+    >
       {/* Logo */}
-      <div className="px-5 py-6 border-b border-white/[0.06]">
+      <div className="px-5 py-6 border-b border-white/[0.06] flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-lime flex items-center justify-center shrink-0">
             <span className="text-olive-dark text-base font-bold">✦</span>
@@ -50,6 +67,13 @@ export default function Sidebar() {
             </div>
           </div>
         </div>
+        {/* Close button — mobile only */}
+        <button
+          onClick={onClose}
+          className="md:hidden text-white/40 hover:text-white text-xl w-8 h-8 flex items-center justify-center rounded-lg hover:bg-white/10 transition-all"
+        >
+          ✕
+        </button>
       </div>
 
       {/* Nav */}

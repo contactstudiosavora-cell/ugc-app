@@ -218,9 +218,9 @@ export default function HistoryPage() {
   const expandedEntry = entries.find((e) => e.id === expanded);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-cream">
+    <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-cream">
       {/* ── LEFT: List ─────────────────────────────────────────── */}
-      <div className="w-[380px] shrink-0 bg-cream-card border-r border-olive/10 flex flex-col overflow-hidden">
+      <div className="w-full md:w-[380px] shrink-0 bg-cream-card border-b md:border-b-0 md:border-r border-olive/10 flex flex-col overflow-hidden md:max-h-screen max-h-[45vh]">
 
         {/* Header */}
         <div className="px-6 pt-7 pb-5 border-b border-olive/10">
@@ -329,7 +329,7 @@ export default function HistoryPage() {
             </div>
           </div>
         ) : (
-          <div className="p-7 space-y-5 animate-fade-in">
+          <div className="p-4 md:p-7 space-y-5 animate-fade-in">
             {/* Meta row */}
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div>
@@ -580,7 +580,7 @@ export default function HistoryPage() {
       {/* Script edit modal */}
       {editModal && (
         <div className="fixed inset-0 bg-olive/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-cream-card border-2 border-olive/15 rounded-2xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+          <div className="bg-cream-card border-2 border-olive/15 rounded-2xl w-full max-w-2xl flex flex-col max-h-[95vh] md:max-h-[90vh] mx-2 md:mx-0">
             {/* Header */}
             <div className="px-6 py-4 border-b border-olive/10 flex items-center justify-between shrink-0">
               <div>

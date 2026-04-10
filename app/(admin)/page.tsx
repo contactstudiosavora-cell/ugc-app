@@ -245,9 +245,9 @@ export default function Home() {
   /* ─── Render ─────────────────────────────────────────────────── */
 
   return (
-    <div className="flex h-screen overflow-hidden bg-cream">
+    <div className="flex flex-col md:flex-row h-screen overflow-hidden bg-cream">
       {/* ── LEFT PANEL: Form ─────────────────────────────────────── */}
-      <div className="w-[380px] shrink-0 bg-cream-card border-r border-olive/10 flex flex-col overflow-y-auto">
+      <div className="w-full md:w-[380px] shrink-0 bg-cream-card border-b md:border-b-0 md:border-r border-olive/10 flex flex-col overflow-y-auto md:max-h-screen max-h-[50vh]">
 
         {/* Panel header */}
         <div className="px-6 pt-7 pb-5 border-b border-olive/10">

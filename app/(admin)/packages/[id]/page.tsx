@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { PackageRow, ScriptRow, PackageStatus } from "@/lib/types";
-import ScriptRenderer from "@/components/ScriptRenderer";
+import ScriptViewerModal from "@/components/ScriptViewerModal";
 import { stripMarkdown } from "@/components/ScriptContent";
 
 const STATUS_CONFIG: Record<PackageStatus, { label: string; color: string }> = {
@@ -201,54 +201,10 @@ export default function PackageDetailPage() {
 
       {/* Script Viewer Modal */}
       {viewingScript && (
-        <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-8"
-          onClick={() => setViewingScript(null)}
-        >
-          <div
-            className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="bg-olive/5 px-6 py-4 border-b border-olive/10 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <span className="text-xl">{ANGLE_LABELS[viewingScript.angle]?.emoji || "📝"}</span>
-                <div>
-                  <div className="font-display text-olive tracking-wider">
-                    {ANGLE_LABELS[viewingScript.angle]?.label || viewingScript.angle}
-                  </div>
-                  <div className="text-[10px] text-olive-muted">
-                    {new Date(viewingScript.createdAt).toLocaleDateString("fr-FR")}
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() => setViewingScript(null)}
-                className="text-olive-muted hover:text-olive text-2xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="flex-1 overflow-y-auto p-6">
-              <ScriptRenderer content={viewingScript.content || ""} />
-            </div>
-
-            {/* Modal Footer */}
-            <div className="bg-olive/5 px-6 py-4 border-t border-olive/10 flex items-center justify-between">
-              <span className={`text-[9px] font-display tracking-widest px-3 py-1.5 rounded-lg border ${SCRIPT_STATUS_CONFIG[viewingScript.status]?.color || SCRIPT_STATUS_CONFIG.generated.color}`}>
-                {SCRIPT_STATUS_CONFIG[viewingScript.status]?.label || "Généré"}
-              </span>
-              <button
-                onClick={() => setViewingScript(null)}
-                className="text-[10px] font-display tracking-widest bg-olive hover:bg-olive-dark text-white rounded-lg px-4 py-2 transition-all"
-              >
-                FERMER
-              </button>
-            </div>
-          </div>
-        </div>
+        <ScriptViewerModal
+          script={viewingScript}
+          onClose={() => setViewingScript(null)}
+        />
       )}
 
       {/* Share Link Modal */}

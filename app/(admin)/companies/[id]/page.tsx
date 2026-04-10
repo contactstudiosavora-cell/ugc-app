@@ -4,6 +4,7 @@ import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
 import type { CompanyRow, PackageRow, ScriptRow, HistoryEntry, ScriptType, PackageStatus, ReferenceScriptRow, ShareTokenRow } from "@/lib/types";
 import { stripMarkdown } from "@/components/ScriptContent";
+import ScriptViewerModal from "@/components/ScriptViewerModal";
 
 const CONTENT_TYPES: { value: ScriptType; label: string; icon: string }[] = [
   { value: "ugc", label: "UGC", icon: "📱" },
@@ -57,6 +58,7 @@ export default function CompanyDetailPage({
   const [editAiInstruction, setEditAiInstruction] = useState("");
   const [editAiLoading, setEditAiLoading] = useState(false);
   const [assigningPackages, setAssigningPackages] = useState<Record<string, string>>({});
+  const [viewingScript, setViewingScript] = useState<ScriptRow | null>(null);
 
   // Share modal
   const [shareScript, setShareScript] = useState<ScriptRow | null>(null);
@@ -650,7 +652,11 @@ export default function CompanyDetailPage({
                   const selectedPackageId = assigningPackages[s.id] ?? s.packageId ?? "";
                   
                   return (
-                    <div key={s.id} className="bg-white border-2 border-olive/10 rounded-xl p-4">
+                    <div
+                      key={s.id}
+                      className="bg-white border-2 border-olive/10 hover:border-olive/25 rounded-xl p-4 cursor-pointer transition-all group"
+                      onClick={() => setViewingScript(s)}
+                    >
                       <div className="flex items-start gap-4">
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-base">{ANGLE_LABELS[s.angle]?.emoji}</span>
@@ -668,7 +674,7 @@ export default function CompanyDetailPage({
                           {stripMarkdown(s.content).slice(0, 150) || "—"}
                         </p>
 
-                        <div className="flex items-center gap-2 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                           <span className={`text-[9px] font-display tracking-widest px-2 py-1 rounded-lg border ${(SCRIPT_STATUS_CONFIG[s.status] ?? SCRIPT_STATUS_CONFIG.generated).color}`}>
                             {(SCRIPT_STATUS_CONFIG[s.status] ?? SCRIPT_STATUS_CONFIG.generated).label}
                           </span>
@@ -777,7 +783,11 @@ export default function CompanyDetailPage({
                     const selectedPackageId = assigningPackages[s.id] ?? s.packageId ?? "";
                     
                     return (
-                      <div key={s.id} className="bg-white border-2 border-lime/20 rounded-xl p-4 shadow-sm">
+                      <div
+                        key={s.id}
+                        className="bg-white border-2 border-lime/20 hover:border-lime/40 rounded-xl p-4 shadow-sm cursor-pointer transition-all"
+                        onClick={() => setViewingScript(s)}
+                      >
                         <div className="flex items-start gap-4">
                           <div className="flex items-center gap-2 shrink-0">
                             <span className="text-base">{ANGLE_LABELS[s.angle]?.emoji}</span>
@@ -795,7 +805,7 @@ export default function CompanyDetailPage({
                             {stripMarkdown(s.content).slice(0, 150) || "—"}
                           </p>
 
-                          <div className="flex items-center gap-2 shrink-0">
+                          <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                             <span className={`text-[9px] font-display tracking-widest px-2 py-1 rounded-lg border ${(SCRIPT_STATUS_CONFIG[s.status] ?? SCRIPT_STATUS_CONFIG.generated).color}`}>
                               {(SCRIPT_STATUS_CONFIG[s.status] ?? SCRIPT_STATUS_CONFIG.generated).label}
                             </span>
@@ -891,6 +901,29 @@ export default function CompanyDetailPage({
           />
         )}
       </div>
+
+      {viewingScript && (
+        <ScriptViewerModal
+          script={viewingScript}
+          onClose={() => setViewingScript(null)}
+          actions={
+            <>
+              <button
+                onClick={(e) => { e.stopPropagation(); setViewingScript(null); handleOpenEdit(viewingScript); }}
+                className="text-[10px] font-display tracking-widest border-2 border-olive/15 hover:border-olive/30 text-olive-muted hover:text-olive rounded-lg px-4 py-2 transition-all"
+              >
+                ✏ ÉDITER
+              </button>
+              <button
+                onClick={(e) => { e.stopPropagation(); setViewingScript(null); handleOpenShare(viewingScript); }}
+                className="text-[10px] font-display tracking-widest border-2 border-lime/30 hover:border-lime/50 text-olive rounded-lg px-4 py-2 transition-all"
+              >
+                🔗 PARTAGER
+              </button>
+            </>
+          }
+        />
+      )}
 
       {editingScript && (
         <ScriptEditModal

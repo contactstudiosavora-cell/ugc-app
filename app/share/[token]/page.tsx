@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, use } from "react";
+import ScriptContent from "@/components/ScriptContent";
 
 interface ShareData {
   share: {
@@ -203,7 +204,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
                 rows={20}
-                className="w-full bg-[#F5F2EB] border border-[#2C2C1E]/12 rounded-xl px-4 py-3 text-[#2C2C1E] text-sm leading-relaxed focus:outline-none focus:border-[#2C2C1E]/30 resize-none font-mono"
+                className="w-full bg-[#F5F2EB] border border-[#2C2C1E]/12 rounded-xl px-4 py-3 text-[#2C2C1E] text-sm leading-relaxed focus:outline-none focus:border-[#2C2C1E]/30 resize-none"
                 autoFocus
               />
               {hasChanges && (
@@ -214,9 +215,7 @@ export default function SharePage({ params }: { params: Promise<{ token: string 
             </div>
           ) : (
             <div className="p-6">
-              <pre className="whitespace-pre-wrap text-sm text-[#2C2C1E]/80 leading-relaxed font-sans">
-                {content}
-              </pre>
+              <ScriptContent content={content} theme="client" />
               {hasChanges && (
                 <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-xl">
                   <p className="text-xs text-orange-600">

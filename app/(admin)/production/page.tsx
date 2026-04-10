@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { ScriptRow, CompanyRow, PackageRow, ScriptStatus } from "@/lib/types";
 import ScriptRenderer from "@/components/ScriptRenderer";
+import { stripMarkdown } from "@/components/ScriptContent";
 
 const STATUS_CONFIG: Record<ScriptStatus, { label: string; next: ScriptStatus | null; nextLabel: string; color: string }> = {
   generated: { label: "GÉNÉRÉ", next: "validated", nextLabel: "✓ VALIDER", color: "bg-cream border-olive/15 text-olive-muted" },
@@ -278,7 +279,7 @@ export default function ProductionPage() {
                             </span>
                           </div>
                           <p className="text-xs text-olive-muted line-clamp-1 leading-relaxed">
-                            {s.content.replace(/#+\s/g, "").replace(/\*/g, "").slice(0, 100)}
+                            {stripMarkdown(s.content).slice(0, 100)}
                           </p>
                         </div>
 

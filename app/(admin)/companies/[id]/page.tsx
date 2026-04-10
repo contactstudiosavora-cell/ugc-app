@@ -3,6 +3,7 @@
 import { useState, useEffect, use, useRef } from "react";
 import Link from "next/link";
 import type { CompanyRow, PackageRow, ScriptRow, HistoryEntry, ScriptType, PackageStatus, ReferenceScriptRow, ShareTokenRow } from "@/lib/types";
+import { stripMarkdown } from "@/components/ScriptContent";
 
 const CONTENT_TYPES: { value: ScriptType; label: string; icon: string }[] = [
   { value: "ugc", label: "UGC", icon: "📱" },
@@ -664,7 +665,7 @@ export default function CompanyDetailPage({
                         </div>
 
                         <p className="flex-1 text-xs text-olive-muted line-clamp-2 leading-relaxed">
-                          {(s.content ?? "").replace(/#+\s/g, "").replace(/\*/g, "").slice(0, 150) || "—"}
+                          {stripMarkdown(s.content).slice(0, 150) || "—"}
                         </p>
 
                         <div className="flex items-center gap-2 shrink-0">
@@ -791,7 +792,7 @@ export default function CompanyDetailPage({
                           </div>
 
                           <p className="flex-1 text-xs text-olive-muted line-clamp-2 leading-relaxed">
-                            {(s.content ?? "").replace(/#+\s/g, "").replace(/\*/g, "").slice(0, 150) || "—"}
+                            {stripMarkdown(s.content).slice(0, 150) || "—"}
                           </p>
 
                           <div className="flex items-center gap-2 shrink-0">

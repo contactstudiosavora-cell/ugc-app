@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
+import ScriptContent from "@/components/ScriptContent";
 
 interface Script {
   id: string;
@@ -55,6 +56,8 @@ export default function SharePackagePage() {
   const [saving, setSaving] = useState<Record<string, boolean>>({});
   const [validated, setValidated] = useState(false);
   const [validating, setValidating] = useState(false);
+  // Which scripts are in edit mode
+  const [editingScripts, setEditingScripts] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     fetch(`/api/share/package/${token}`)
@@ -277,20 +280,45 @@ export default function SharePackagePage() {
                   </div>
                 </div>
 
-                {/* Script Content - Editable */}
+                {/* Script Content - View / Edit toggle */}
                 <div className="p-6 space-y-4">
                   <div>
-                    <label className="block text-[10px] text-olive-muted uppercase tracking-widest font-semibold mb-2">
-                      Contenu du script
-                    </label>
-                    <textarea
-                      value={editedContents[script.id] || ""}
-                      onChange={(e) => setEditedContents((prev) => ({ ...prev, [script.id]: e.target.value }))}
-                      disabled={isValidated}
-                      rows={12}
-                      className="w-full bg-cream-input border-2 border-olive/15 focus:border-lime/50 rounded-xl px-4 py-3 text-olive-muted text-sm leading-relaxed focus:outline-none resize-none disabled:opacity-60 disabled:cursor-not-allowed"
-                      placeholder="Modifiez le script ici..."
-                    />
+                    <div className="flex items-center justify-between mb-3">
+                      <label className="text-[10px] text-olive-muted uppercase tracking-widest font-semibold">
+                        Contenu du script
+                      </label>
+                      {!isValidated && (
+                        <button
+                          onClick={() => setEditingScripts((prev) => ({ ...prev, [script.id]: !prev[script.id] }))}
+                          className={`text-[10px] font-display tracking-widest px-3 py-1.5 rounded-lg border transition-all ${
+                            editingScripts[script.id]
+                              ? "bg-[#2C2C1E] text-white border-[#2C2C1E]"
+                              : "border-olive/20 text-olive-muted hover:text-olive hover:border-olive/40"
+                          }`}
+                        >
+                          {editingScripts[script.id] ? "✕ FERMER L'ÉDITION" : "✏ MODIFIER"}
+                        </button>
+                      )}
+                    </div>
+                    {editingScripts[script.id] && !isValidated ? (
+                      <textarea
+                        value={editedContents[script.id] || ""}
+                        onChange={(e) => setEditedContents((prev) => ({ ...prev, [script.id]: e.target.value }))}
+                        rows={14}
+                        className="w-full bg-cream-input border-2 border-olive/15 focus:border-lime/50 rounded-xl px-4 py-3 text-olive-muted text-sm leading-relaxed focus:outline-none resize-none"
+                        placeholder="Modifiez le script ici..."
+                        autoFocus
+                      />
+                    ) : (
+                      <div className="bg-white rounded-xl border border-olive/10 px-5 py-4">
+                        <ScriptContent content={editedContents[script.id] || ""} theme="admin" />
+                        {editedContents[script.id] !== script.content && !editingScripts[script.id] && (
+                          <p className="text-[10px] text-orange-500 mt-3 pt-2 border-t border-orange-100">
+                            ✏ Version modifiée
+                          </p>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <div>

@@ -4,6 +4,8 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import type { PackageRow, ScriptRow, PackageStatus } from "@/lib/types";
+import ScriptRenderer from "@/components/ScriptRenderer";
+import { stripMarkdown } from "@/components/ScriptContent";
 
 const STATUS_CONFIG: Record<PackageStatus, { label: string; color: string }> = {
   active: { label: "ACTIF", color: "bg-lime/20 text-olive border-lime/30" },
@@ -173,7 +175,7 @@ export default function PackageDetailPage() {
                   </div>
 
                   <p className="flex-1 text-xs text-olive-muted line-clamp-2 leading-relaxed">
-                    {(script.content ?? "").replace(/#+\s/g, "").replace(/\*/g, "").slice(0, 200) || "—"}
+                    {stripMarkdown(script.content).slice(0, 200) || "—"}
                   </p>
 
                   <div className="flex items-center gap-2 shrink-0">
@@ -230,11 +232,7 @@ export default function PackageDetailPage() {
 
             {/* Modal Content */}
             <div className="flex-1 overflow-y-auto p-6">
-              <div className="prose prose-sm max-w-none">
-                <div className="whitespace-pre-wrap text-olive-muted leading-relaxed">
-                  {viewingScript.content || "Aucun contenu"}
-                </div>
-              </div>
+              <ScriptRenderer content={viewingScript.content || ""} />
             </div>
 
             {/* Modal Footer */}

@@ -814,6 +814,13 @@ export default function CompanyDetailPage({
                             >
                               ✏ ÉDITER
                             </button>
+                            <button
+                              onClick={() => handleOpenShare(s)}
+                              className="text-[9px] font-display tracking-widest border border-olive/15 hover:border-lime/40 text-olive-muted hover:text-olive rounded-lg px-2.5 py-1.5 transition-all"
+                              title="Partager avec le client"
+                            >
+                              🔗 PARTAGER
+                            </button>
                           </div>
                         </div>
 
@@ -857,6 +864,12 @@ export default function CompanyDetailPage({
                                 </button>
                               )}
                             </div>
+                            {/* Package share shortcut */}
+                            {s.packageId && (
+                              <div className="mt-2 flex items-center gap-2">
+                                <PackageShareButton packageId={s.packageId} />
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -995,6 +1008,44 @@ function CreatePackageModal({
         </div>
       </div>
     </div>
+  );
+}
+
+/* ─── Package Share Button ───────────────────────────────────── */
+
+function PackageShareButton({ packageId }: { packageId: string }) {
+  const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const handleShare = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`/api/packages/${packageId}/share`, { method: "POST" });
+      if (!res.ok) throw new Error();
+      const data = await res.json();
+      const link = `${window.location.origin}/share/package/${data.shareToken}`;
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      alert("Erreur lors de la génération du lien");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleShare}
+      disabled={loading}
+      className={`flex items-center gap-1.5 text-[9px] font-display tracking-widest px-3 py-1.5 rounded-lg border-2 transition-all disabled:opacity-50 ${
+        copied
+          ? "bg-lime/30 border-lime/50 text-olive"
+          : "bg-lime/10 border-lime/30 hover:bg-lime/20 text-olive"
+      }`}
+    >
+      {loading ? "…" : copied ? "✓ LIEN COPIÉ !" : "🔗 COPIER LIEN DU PACKAGE"}
+    </button>
   );
 }
 

@@ -506,7 +506,13 @@ export async function updateScript(
   data: Partial<{ content: string; notes: string; packageId: string | null }>
 ): Promise<ScriptRow | null> {
   const db = await getDb();
-  await db.collection<ScriptDoc>("scripts").updateOne({ _id: id }, { $set: data });
+  // Filter out undefined values — BSON serializes undefined as null which would
+  // accidentally overwrite existing content when only packageId is being updated.
+  const update = Object.fromEntries(
+    Object.entries(data).filter(([, v]) => v !== undefined)
+  );
+  if (Object.keys(update).length === 0) return getScriptById(id);
+  await db.collection<ScriptDoc>("scripts").updateOne({ _id: id }, { $set: update });
   return getScriptById(id);
 }
 
